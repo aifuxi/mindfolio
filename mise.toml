@@ -1,0 +1,53 @@
+[tools]
+rust = { version = "1.97.1", profile = "minimal", components = ["rustfmt", "clippy"] }
+node = "24.21.0"
+pnpm = "12.3.4"
+
+[tasks.setup]
+description = "安装锁定依赖"
+run = ["mise install --locked rust node pnpm", "bash scripts/verify-toolchain.sh", "pnpm install --frozen-lockfile", "cargo fetch --locked"]
+
+[tasks."dev:api"]
+depends = ["setup"]
+run = "cargo run --locked -p mindfolio-api"
+
+[tasks."dev:admin"]
+depends = ["setup"]
+run = "pnpm --filter @mindfolio/admin dev"
+
+[tasks.dev]
+description = "启动本地 API 和管理端"
+depends = ["dev:api", "dev:admin"]
+
+[tasks.fmt]
+description = "修复 Rust 与前端格式"
+depends = ["setup"]
+run = ["cargo fmt --all", "pnpm exec prettier --write apps/admin package.json pnpm-workspace.yaml eslint.config.js"]
+
+[tasks."fmt:check"]
+depends = ["setup"]
+run = ["cargo fmt --all -- --check", "pnpm exec prettier --check apps/admin package.json pnpm-workspace.yaml eslint.config.js"]
+
+[tasks.lint]
+depends = ["setup"]
+run = ["cargo clippy --workspace --all-targets --locked -- -D warnings", "pnpm exec eslint apps/admin/src apps/admin/vite.config.ts eslint.config.js --max-warnings 0"]
+
+[tasks.typecheck]
+depends = ["setup"]
+run = "pnpm --filter @mindfolio/admin exec vue-tsc --noEmit -p tsconfig.app.json"
+
+[tasks.check]
+description = "执行格式、lint 与类型检查"
+depends = ["fmt:check", "lint", "typecheck"]
+
+[tasks.test]
+depends = ["setup"]
+run = ["cargo test --workspace --locked", "pnpm --filter @mindfolio/admin test"]
+
+[tasks.build]
+depends = ["setup"]
+run = ["cargo build --workspace --locked", "pnpm --filter @mindfolio/admin build"]
+
+[tasks.ci]
+description = "执行全部质量检查、测试和构建"
+depends = ["check", "test", "build"]
