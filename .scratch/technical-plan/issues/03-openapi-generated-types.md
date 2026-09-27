@@ -1,6 +1,6 @@
 # 建立 OpenAPI 与 TypeScript 类型生成链
 
-Status: ready-for-agent
+Status: done
 
 ## 目标
 
@@ -28,3 +28,15 @@ Status: ready-for-agent
 - 依赖任务 01；可与任务 02 分别推进。若选择数据库就绪接口作为首个契约，先完成任务 02。
 - 本任务不设计项目任务、习惯或公开网站的业务 DTO。
 - 完成时记录生成工具版本、产物提交策略、生成命令及漂移检查结果。
+
+## 验收记录
+
+- 2026-09-27：在 macOS arm64 上锁定并验证 `utoipa` `6.0.0`、`openapi-typescript` `7.13.0` 与 `openapi-fetch` `0.17.0`。`mise run contract:generate` 从 Rust DTO 和路由注解生成 OpenAPI `3.1.0` 与共享 TypeScript 类型，两个产物均提交版本库；`mise run contract:check` 只读比较产物。
+- 临时把真实 `HealthStatus.status` 序列化字段改为 `state` 后重新生成，OpenAPI 与 TypeScript 均同步出现 `state`；恢复 DTO 并重新生成后，产物回到 `status`。
+- 手工破坏生成的 TypeScript 文件后，`mise run contract:check` 和 `mise run ci` 均返回非零并提示 `mise run contract:generate`；破坏内容仍在，确认检查未自动修复。临时改坏生成的路径类型后，独立 Vue 类型检查报错，证明管理端实际依赖生成类型。所有临时变更已还原。
+- 完整 `mise run ci` 通过。通过本地 Vite 同源 `/api` 代理请求时，`/api/health/live` 与 `/api/health/ready` 均返回 HTTP 200 及 `{"status":"ok"}`；停库后就绪接口返回 HTTP 503，包含 `database_unavailable`、中文消息和 UUID 请求标识，与生成契约一致。开发服务和数据库容器已停止。
+
+## 遗留问题与下一步
+
+- 当前真实接口没有资源 ID、业务日期或可空业务字段；已在 README 固定其表示约定，字段级生成验证须随首个实际使用这些字段的 API 完成，不添加虚构业务接口。本次尚未在目标生产代理环境验证 `/api` 转发。
+- 后续独立任务 04 可使用生成类型实现管理者认证 DTO、接口及页面，并补充实际请求字段、错误响应和鉴权边界的契约验收。

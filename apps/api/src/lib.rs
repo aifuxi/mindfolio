@@ -3,32 +3,87 @@ use std::time::Duration;
 use axum::{Json, Router, http::StatusCode, routing::get};
 use serde::Serialize;
 use sqlx::{PgPool, postgres::PgPoolOptions};
+use utoipa::{OpenApi, ToSchema};
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct HealthStatus {
-    status: &'static str,
+    status: HealthState,
 }
 
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+enum HealthState {
+    Ok,
+}
+
+#[derive(Serialize, ToSchema)]
+struct ApiError {
+    code: ErrorCode,
+    message: String,
+    request_id: String,
+}
+
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+enum ErrorCode {
+    DatabaseUnavailable,
+}
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(live, ready),
+    components(schemas(HealthStatus, HealthState, ApiError, ErrorCode)),
+    servers((url = "/api"))
+)]
+struct ApiDoc;
+
+pub fn openapi() -> utoipa::openapi::OpenApi {
+    let mut document = ApiDoc::openapi();
+    document.openapi = utoipa::openapi::OpenApiVersion::Version31;
+    document.info.description = Some("Mindfolio 管理端 API".to_string());
+    document.info.license = None;
+    document
+}
+
+#[utoipa::path(
+    get,
+    path = "/health/live",
+    responses((status = 200, description = "进程存活", body = HealthStatus))
+)]
 async fn live() -> Json<HealthStatus> {
-    Json(HealthStatus { status: "ok" })
+    Json(HealthStatus {
+        status: HealthState::Ok,
+    })
 }
 
+#[utoipa::path(
+    get,
+    path = "/health/ready",
+    responses(
+        (status = 200, description = "数据库就绪", body = HealthStatus),
+        (status = 503, description = "数据库不可用", body = ApiError)
+    )
+)]
 async fn ready(
     axum::extract::State(pool): axum::extract::State<PgPool>,
-) -> (StatusCode, Json<HealthStatus>) {
+) -> Result<Json<HealthStatus>, (StatusCode, Json<ApiError>)> {
     if sqlx::query_scalar::<_, i32>("SELECT 1")
         .fetch_one(&pool)
         .await
         .is_ok()
     {
-        (StatusCode::OK, Json(HealthStatus { status: "ok" }))
+        Ok(Json(HealthStatus {
+            status: HealthState::Ok,
+        }))
     } else {
-        (
+        Err((
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(HealthStatus {
-                status: "unavailable",
+            Json(ApiError {
+                code: ErrorCode::DatabaseUnavailable,
+                message: "数据库不可用".to_string(),
+                request_id: uuid::Uuid::new_v4().to_string(),
             }),
-        )
+        ))
     }
 }
 

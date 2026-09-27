@@ -29,13 +29,12 @@ async fn 数据库就绪与不可用时的健康响应() {
         .acquire_timeout(std::time::Duration::from_millis(200))
         .connect_lazy("postgres://unused:unused@127.0.0.1:1/unused")
         .unwrap();
-    assert_eq!(
-        response(unavailable.clone(), "/health/ready").await,
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            r#"{"status":"unavailable"}"#.into()
-        )
-    );
+    let (status, body) = response(unavailable.clone(), "/health/ready").await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    let error: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(error["code"], "database_unavailable");
+    assert_eq!(error["message"], "数据库不可用");
+    assert!(uuid::Uuid::parse_str(error["request_id"].as_str().unwrap()).is_ok());
     assert_eq!(
         response(unavailable, "/health/live").await,
         (StatusCode::OK, r#"{"status":"ok"}"#.into())

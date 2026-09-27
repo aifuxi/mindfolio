@@ -1,2 +1,3 @@
 packages:
   - apps/admin
+  - packages/api-contract

@@ -1,6 +1,6 @@
 # Mindfolio
 
-本仓库先建立 Rust API 与 Vue 管理端的最小工程。API 提供进程存活接口 `GET /health/live` 和数据库就绪接口 `GET /health/ready`；契约生成与认证将在后续任务实现。
+本仓库先建立 Rust API 与 Vue 管理端的最小工程。API 提供进程存活接口 `GET /health/live` 和数据库就绪接口 `GET /health/ready`；管理端使用 Rust DTO 生成的接口类型，认证将在后续任务实现。
 
 ## 环境准备
 
@@ -24,6 +24,8 @@ mise run setup
 | `mise run db:migrate` | 对开发数据库执行版本化迁移 |
 | `mise run db:prepare:test` | 准备独立的测试数据库 |
 | `mise run db:verify:empty` | 从空库执行迁移并重复执行核对 |
+| `mise run contract:generate` | 从 Rust DTO 生成 OpenAPI 3.1.0 与 TypeScript 类型 |
+| `mise run contract:check` | 只读检查已提交的契约产物是否同步 |
 | `mise run fmt` | 修复 Rust 与前端格式 |
 | `mise run fmt:check` | 只读格式检查 |
 | `mise run lint` | Clippy 和 ESLint；警告也失败 |
@@ -40,5 +42,13 @@ mise run setup
 首次运行 `mise run db:start` 会生成仅供本地使用的 `.env.db`，其中包含随机数据库密码，文件已被 Git 忽略。PostgreSQL `17.7-alpine` 使用固定镜像 digest，默认仅监听本机 `55432` 端口；开发库为 `mindfolio_dev`，测试库为 `mindfolio_test`。可在首次启动前通过 `.env.db` 的 `DB_PORT` 修改端口。测试库独立于开发库；测试用事务在结束时回滚。
 
 数据库异常时先运行 `mise run db:status`，再通过 `mise exec -- docker compose --env-file .env.db -f compose.db.yaml logs postgres` 查看容器日志；迁移失败会由 `mise run db:migrate` 输出错误。`mise run db:verify:empty` 使用临时数据库核对空库、重复迁移及结构冲突时报错，并在结束后删除临时库。开发数据卷不会随 `db:stop` 删除。
+
+## 接口契约
+
+修改 API 时，先在 Rust 请求或响应 DTO 与对应的 `#[utoipa::path]` 注解中更新结构，再运行 `mise run contract:generate`，提交 `packages/api-contract/openapi.json` 和 `packages/api-contract/src/schema.d.ts`。随后运行 `mise run contract:check` 与 `mise run ci`。漂移检查只读，失败时提示重新生成；管理端通过 `@mindfolio/api-contract` 和 `openapi-fetch` 使用生成类型。
+
+OpenAPI 的 `servers` 为同源 `/api`，文档 `paths` 为后端路由；管理端请求 `/api/health/ready`，本地 Vite 代理去掉 `/api` 后转发给 Rust，生产代理需保持相同约定。错误响应包含稳定 `code`、中文 `message` 和字符串 `request_id`，当前数据库不可用错误码为 `database_unavailable`。
+
+后续业务 DTO 的资源 ID（含参数和关联引用）使用十进制字符串，不输出 JSON 大整数；业务日期使用 `YYYY-MM-DD` 字符串，实际时刻使用 UTC RFC 3339 字符串。可空字段应在 Rust 序列化和 OpenAPI 中明确表示 `null`，与字段缺省区分。当前健康接口没有业务 ID、日期或可空字段，这些字段的生成结果须在首个实际使用它们的 API 任务中验证。
 
 本地 `.env`、`mise.local.toml` 与其他秘密信息不进入版本库。新增工程阶段时，先接入真实任务与检查，再扩展 `mise run ci`。

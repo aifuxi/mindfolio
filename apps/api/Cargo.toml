@@ -7,8 +7,11 @@ rust-version.workspace = true
 [dependencies]
 axum.workspace = true
 serde.workspace = true
+serde_json = "1.0"
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio-rustls", "postgres", "migrate", "macros"] }
 tokio.workspace = true
+utoipa = "6.0.0"
+uuid = { version = "1.18.1", features = ["v4"] }
 
 [dev-dependencies]
 tower.workspace = true

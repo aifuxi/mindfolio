@@ -22,18 +22,28 @@ depends = ["dev:api", "dev:admin"]
 [tasks.fmt]
 description = "修复 Rust 与前端格式"
 depends = ["setup"]
-run = ["cargo fmt --all", "pnpm exec prettier --write apps/admin package.json pnpm-workspace.yaml eslint.config.js"]
+run = ["cargo fmt --all", "pnpm exec prettier --write apps/admin scripts/contract.mjs packages/api-contract/package.json package.json pnpm-workspace.yaml eslint.config.js"]
 
 [tasks."fmt:check"]
 depends = ["setup"]
-run = ["cargo fmt --all -- --check", "pnpm exec prettier --check apps/admin package.json pnpm-workspace.yaml eslint.config.js"]
+run = ["cargo fmt --all -- --check", "pnpm exec prettier --check apps/admin scripts/contract.mjs packages/api-contract/package.json package.json pnpm-workspace.yaml eslint.config.js"]
 
 [tasks.lint]
 depends = ["setup"]
-run = ["cargo clippy --workspace --all-targets --locked -- -D warnings", "pnpm exec eslint apps/admin/src apps/admin/vite.config.ts eslint.config.js --max-warnings 0"]
+run = ["cargo clippy --workspace --all-targets --locked -- -D warnings", "pnpm exec eslint apps/admin/src apps/admin/vite.config.ts eslint.config.js scripts/contract.mjs --max-warnings 0"]
+
+[tasks."contract:generate"]
+description = "从 Rust DTO 生成 OpenAPI 与 TypeScript 类型"
+depends = ["setup"]
+run = "node scripts/contract.mjs generate"
+
+[tasks."contract:check"]
+description = "只读检查 OpenAPI 与 TypeScript 类型产物"
+depends = ["setup"]
+run = "node scripts/contract.mjs check"
 
 [tasks.typecheck]
-depends = ["setup"]
+depends = ["contract:check"]
 run = "pnpm --filter @mindfolio/admin exec vue-tsc --noEmit -p tsconfig.app.json"
 
 [tasks.check]
@@ -73,9 +83,9 @@ depends = ["db:start"]
 run = "bash scripts/db.sh verify-empty"
 
 [tasks.build]
-depends = ["setup"]
+depends = ["contract:check"]
 run = ["cargo build --workspace --locked", "pnpm --filter @mindfolio/admin build"]
 
 [tasks.ci]
 description = "执行全部质量检查、测试和构建"
-depends = ["check", "test", "build", "db:verify:empty"]
+depends = ["check", "test", "build", "db:verify:empty", "contract:check"]

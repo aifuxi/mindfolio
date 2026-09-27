@@ -9,8 +9,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@aifuxi/semi-ui-vue": "1.1.2",
     "@aifuxi/semi-theme-default": "1.1.2",
+    "@aifuxi/semi-ui-vue": "1.1.2",
+    "@mindfolio/api-contract": "workspace:*",
+    "openapi-fetch": "0.17.0",
     "vue": "3.5.43"
   },
   "devDependencies": {

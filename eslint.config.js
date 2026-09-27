@@ -25,7 +25,11 @@ export default [
     rules: { "no-console": "warn" },
   },
   {
-    files: ["eslint.config.js", "apps/admin/vite.config.ts"],
+    files: [
+      "eslint.config.js",
+      "apps/admin/vite.config.ts",
+      "scripts/contract.mjs",
+    ],
     languageOptions: { globals: globals.node },
   },
   eslintConfigPrettier,

@@ -1,0 +1,12 @@
+{
+  "name": "@mindfolio/api-contract",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "types": "./src/schema.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/schema.d.ts"
+    }
+  }
+}
