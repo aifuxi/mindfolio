@@ -12,7 +12,7 @@ mise install --locked rust node pnpm
 mise run setup
 ```
 
-已验证的本地环境为 macOS arm64。配置固定 Rust `1.97.1`（minimal profile，额外安装 rustfmt 与 Clippy）、Node.js `24.21.0`、pnpm `12.3.4`。`mise.lock` 包含 macOS arm64 与 Linux x64 的下载记录；Linux 实际运行结果以 GitHub Actions 为准。Cargo 和 pnpm 依赖分别使用 `Cargo.lock` 与 `pnpm-lock.yaml`。
+已验证的环境为 macOS arm64 和 GitHub Actions Ubuntu Linux x64。配置固定 Rust `1.97.1`（minimal profile，额外安装 rustfmt 与 Clippy）、Node.js `24.21.0`、pnpm `12.3.4`。`mise.lock` 包含两个平台的下载记录。Cargo 和 pnpm 依赖分别使用 `Cargo.lock` 与 `pnpm-lock.yaml`。
 
 ## 常用命令
 
