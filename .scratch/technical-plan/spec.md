@@ -211,6 +211,8 @@ GitHub Actions 安装锁定的 mise 与项目工具，调用与本地相同的 m
 
 第一阶段使用 OSS 作为外部备份目的地，不因此提前开发文章媒体功能。各阶段的验证失败应在对应阶段解决，不能用模拟结果替代部署或云服务兼容结论。
 
+工程基础任务按 [01 统一工具链与质量检查](./issues/01-mise-toolchain-quality.md) → [02 PostgreSQL 与迁移](./issues/02-postgresql-migrations.md)、[03 OpenAPI 与类型生成](./issues/03-openapi-generated-types.md) → [04 唯一管理者登录](./issues/04-local-admin-auth.md) 推进。02 与 03 在 01 完成后可分别实施，04 依赖两者；生产部署、备份和恢复在第一阶段业务达到上线条件后另行拆任务。
+
 ## 测试决策
 
 验收以外部可观察行为为主，优先选择 HTTP 接口与真实 PostgreSQL 的边界，少量浏览器流程串联关键用户操作。仓库目前没有应用代码或既有测试体系，因此建立这一组共同边界，避免每个业务模块各自设计内部测试框架。
@@ -247,7 +249,7 @@ GitHub Actions 安装锁定的 mise 与项目工具，调用与本地相同的 m
 - [已确认的功能范围](../product-scope/spec.md)、[领域术语](../../CONTEXT.md)、[技术选择与讨论记录](./decisions.md)、[验收边界](./testing-plan.md)、[部署调研](./deployment-research.md)。
 - [契约 ADR](../../docs/adr/0001-rust-dto-openapi-typescript.md)、[主键 ADR](../../docs/adr/0002-postgresql-identity-primary-keys.md)、[组件库 ADR](../../docs/adr/0003-semi-ui-vue.md)、[后端 ADR](../../docs/adr/0004-rust-modular-monolith.md)。
 - [部署 ADR](../../docs/adr/0005-caddy-portainer-deployment.md)、[登录 ADR](../../docs/adr/0006-local-account-postgresql-session.md)、[SSR ADR](../../docs/adr/0007-nuxt-public-ssr.md)、[单仓库 ADR](../../docs/adr/0008-monorepo-pnpm-workspace.md)、[存储 ADR](../../docs/adr/0009-external-object-storage.md)、[完成历史 ADR](../../docs/adr/0010-preserve-task-completion-history.md)。
-- [mise ADR](../../docs/adr/0011-mise-unified-toolchain.md)、[工程基础任务：统一工具链与质量检查](./issues/01-mise-toolchain-quality.md)。
+- [mise ADR](../../docs/adr/0011-mise-unified-toolchain.md)、[工程基础任务：统一工具链与质量检查](./issues/01-mise-toolchain-quality.md)、[PostgreSQL 与迁移](./issues/02-postgresql-migrations.md)、[OpenAPI 与类型生成](./issues/03-openapi-generated-types.md)、[唯一管理者登录](./issues/04-local-admin-auth.md)。
 - 配置依据：[mise Rust 后端](https://mise.jdx.dev/lang/rust.html)、[mise 锁文件](https://mise.jdx.dev/dev-tools/mise-lock.html)、[mise CI](https://mise.jdx.dev/continuous-integration.html)、[Vue TypeScript ESLint 配置](https://github.com/vuejs/eslint-config-typescript)、[Prettier 与 linter 配合](https://prettier.io/docs/integrating-with-linters)、[Nuxt ESLint](https://eslint.nuxt.com/packages/module)。
 - [utoipa OpenAPI 版本](https://docs.rs/utoipa/latest/utoipa/openapi/enum.OpenApiVersion.html)、[openapi-typescript](https://openapi-ts.dev/introduction)、[openapi-fetch](https://openapi-ts.dev/openapi-fetch/)、[Vue Router](https://router.vuejs.org/)。
 - [markdown-it 默认配置](https://github.com/markdown-it/markdown-it/blob/master/src/presets/default.ts)、[markdown-it 链接处理](https://github.com/markdown-it/markdown-it/blob/master/src/markdownit.ts)、[JSON 数值互操作范围](https://www.rfc-editor.org/rfc/rfc8259.html#section-6)。
