@@ -5,6 +5,13 @@ test("管理者登录、刷新、过期和退出", async ({ page, context }) => 
   expect(health.status()).toBe(200);
   expect(await health.json()).toEqual({ status: "ok" });
   let active = false;
+  await page.route("**/api/projects**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ items: [], page: 1, has_more: false }),
+    }),
+  );
   await page.route("**/api/auth/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/auth/login") {

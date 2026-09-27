@@ -9,9 +9,11 @@ use argon2::{
 };
 use axum::{
     Json, Router,
+    extract::Request,
     extract::{State, rejection::JsonRejection},
     http::{HeaderMap, HeaderValue, StatusCode, header},
-    response::IntoResponse,
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
     routing::{get, post},
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -26,6 +28,65 @@ use utoipa::ToSchema;
 use crate::{ApiError, ErrorCode};
 
 type AuthFailure = (StatusCode, Json<ApiError>);
+
+#[derive(Clone)]
+pub(super) struct PrivateState {
+    pub pool: PgPool,
+    config: AuthConfig,
+}
+
+pub(super) fn protect(
+    routes: Router<PrivateState>,
+    pool: PgPool,
+    config: AuthConfig,
+) -> Router<PgPool> {
+    let state = PrivateState { pool, config };
+    routes
+        .route_layer(middleware::from_fn_with_state(state.clone(), private_guard))
+        .with_state(state)
+}
+
+async fn private_guard(
+    State(state): State<PrivateState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, AuthFailure> {
+    let (_, _, stored_csrf_hash) =
+        authenticated(&state.pool, &state.config, request.headers()).await?;
+    if !matches!(
+        *request.method(),
+        axum::http::Method::GET | axum::http::Method::HEAD
+    ) {
+        if !origin_valid(request.headers(), &state.config) {
+            return Err(failure(
+                StatusCode::FORBIDDEN,
+                ErrorCode::Forbidden,
+                "请求来源不匹配",
+            ));
+        }
+        let supplied = request
+            .headers()
+            .get("x-csrf-token")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("");
+        if hash(supplied.as_bytes())
+            .ct_eq(&stored_csrf_hash)
+            .unwrap_u8()
+            != 1
+        {
+            return Err(failure(
+                StatusCode::FORBIDDEN,
+                ErrorCode::Forbidden,
+                "CSRF 校验失败",
+            ));
+        }
+    }
+    let mut response = next.run(request).await;
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    Ok(response)
+}
 
 #[derive(Clone)]
 pub struct AuthConfig {
@@ -406,10 +467,11 @@ pub(super) async fn login(
 }
 
 async fn authenticated(
-    state: &AuthState,
+    pool: &PgPool,
+    config: &AuthConfig,
     headers: &HeaderMap,
 ) -> Result<(String, String, Vec<u8>), AuthFailure> {
-    let token = cookie_token(headers, &state.config).ok_or_else(unauthorized)?;
+    let token = cookie_token(headers, config).ok_or_else(unauthorized)?;
     let found: Option<(String, Vec<u8>)> = sqlx::query_as(
         "UPDATE admin_session AS s
          SET last_seen_at = now(),
@@ -420,8 +482,8 @@ async fn authenticated(
          RETURNING a.username, s.csrf_token_hash",
     )
     .bind(hash(token.as_bytes()))
-    .bind(state.config.idle_seconds)
-    .fetch_optional(&state.pool)
+    .bind(config.idle_seconds)
+    .fetch_optional(pool)
     .await
     .map_err(|_| {
         failure(
@@ -448,7 +510,7 @@ pub(super) async fn session(
     State(state): State<AuthState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, AuthFailure> {
-    let (username, token, _) = authenticated(&state, &headers).await?;
+    let (username, token, _) = authenticated(&state.pool, &state.config, &headers).await?;
     let mut response_headers = HeaderMap::new();
     response_headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     Ok((
@@ -484,7 +546,7 @@ pub(super) async fn logout(
             "请求来源不匹配",
         ));
     }
-    let (_, token, stored_csrf_hash) = authenticated(&state, &headers).await?;
+    let (_, token, stored_csrf_hash) = authenticated(&state.pool, &state.config, &headers).await?;
     let supplied = headers
         .get("x-csrf-token")
         .and_then(|value| value.to_str().ok())

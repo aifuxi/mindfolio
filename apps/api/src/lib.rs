@@ -6,6 +6,7 @@ use sqlx::{PgPool, postgres::PgPoolOptions};
 use utoipa::{OpenApi, ToSchema};
 
 mod auth;
+mod projects;
 pub use auth::{AuthConfig, initialize_admin, reset_admin};
 
 #[derive(Serialize, ToSchema)]
@@ -36,12 +37,14 @@ enum ErrorCode {
     Forbidden,
     RateLimited,
     AuthUnavailable,
+    NotFound,
+    VersionConflict,
 }
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(live, ready, auth::login, auth::session, auth::logout),
-    components(schemas(HealthStatus, HealthState, ApiError, ErrorCode, auth::LoginRequest, auth::SessionResponse)),
+    paths(live, ready, auth::login, auth::session, auth::logout, projects::list, projects::create, projects::detail, projects::rename, projects::complete, projects::archive, projects::restore),
+    components(schemas(HealthStatus, HealthState, ApiError, ErrorCode, auth::LoginRequest, auth::SessionResponse, projects::ProjectResponse, projects::ProjectPage, projects::CreateProject, projects::RenameProject, projects::VersionRequest)),
     servers((url = "/api"))
 )]
 struct ApiDoc;
@@ -114,6 +117,11 @@ pub fn app_with_config(pool: PgPool, config: AuthConfig) -> Router {
     Router::new()
         .route("/health/live", get(live))
         .route("/health/ready", get(ready))
+        .merge(auth::protect(
+            projects::routes(),
+            pool.clone(),
+            config.clone(),
+        ))
         .merge(auth::routes(pool.clone(), config))
         .with_state(pool)
 }
