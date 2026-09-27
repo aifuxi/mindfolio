@@ -190,7 +190,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** @description 缺省字段保持原值；parent_id、project_id、description、priority、planned_date、due_date 的 null 清空；title、status、in_backlog 的 null 与缺省等效。移动到收件箱时，若未指定 in_backlog，会自动离开待规划区。 */
+        /** @description 缺省字段保持原值；parent_id、project_id、description、priority、planned_date、due_date 的 null 清空；tags 传数组替换所有任务标签；title、status、in_backlog 的 null 与缺省等效。移动到收件箱时，若未指定 in_backlog，会自动离开待规划区。 */
         patch: operations["update_task"];
         trace?: never;
     };
@@ -231,6 +231,7 @@ export interface components {
             priority?: components["schemas"]["TaskPriority"] | null;
             project_id?: string | null;
             status?: components["schemas"]["TaskStatus"] | null;
+            tags?: string[] | null;
             title: string;
         };
         /** @enum {string} */
@@ -285,6 +286,7 @@ export interface components {
             priority?: components["schemas"]["TaskPriority"] | null;
             project_id?: string | null;
             status: components["schemas"]["TaskStatus"];
+            tags: string[];
             title: string;
             /** Format: int64 */
             version: number;
@@ -302,6 +304,7 @@ export interface components {
             priority?: components["schemas"]["TaskPriority"] | null;
             project_id?: string | null;
             status?: components["schemas"]["TaskStatus"] | null;
+            tags?: string[] | null;
             title?: string | null;
         };
         VersionRequest: {
@@ -981,7 +984,14 @@ export interface operations {
                 /** @description inbox 或 project */
                 scope: string;
                 project_id?: string;
+                include_subtasks?: boolean;
                 page?: number;
+                keyword?: string;
+                status?: components["schemas"]["TaskStatus"];
+                priority?: components["schemas"]["TaskPriority"];
+                planned_date?: string;
+                due_date?: string;
+                tag?: string;
             };
             header?: never;
             path?: never;
@@ -1228,6 +1238,12 @@ export interface operations {
         parameters: {
             query?: {
                 page?: number;
+                keyword?: string;
+                status?: components["schemas"]["TaskStatus"];
+                priority?: components["schemas"]["TaskPriority"];
+                planned_date?: string;
+                due_date?: string;
+                tag?: string;
             };
             header?: never;
             path: {

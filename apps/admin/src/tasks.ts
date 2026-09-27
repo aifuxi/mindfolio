@@ -7,6 +7,14 @@ export type TaskStatus = components["schemas"]["TaskStatus"];
 export type TaskPriority = components["schemas"]["TaskPriority"];
 export type CreateTask = components["schemas"]["CreateTask"];
 export type UpdateTask = components["schemas"]["UpdateTask"];
+export type TaskFilters = {
+  keyword?: string;
+  status?: TaskStatus;
+  priority?: TaskPriority;
+  planned_date?: string;
+  due_date?: string;
+  tag?: string;
+};
 type ApiError = components["schemas"]["ApiError"];
 
 const client = createClient<paths>({ baseUrl: "/api" });
@@ -41,12 +49,22 @@ function csrf(): string {
   return token;
 }
 
-export async function listTasks(page: number, projectId: string | null) {
+export async function listTasks(
+  page: number,
+  projectId: string | null,
+  filters: TaskFilters = {},
+) {
   const { data, error, response } = await client.GET("/tasks", {
     params: {
       query: projectId
-        ? { scope: "project", project_id: projectId, page }
-        : { scope: "inbox", page },
+        ? {
+            scope: "project",
+            project_id: projectId,
+            include_subtasks: true,
+            page,
+            ...filters,
+          }
+        : { scope: "inbox", include_subtasks: true, page, ...filters },
     },
   });
   return result(response, data, error);

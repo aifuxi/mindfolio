@@ -59,7 +59,7 @@ Status: ready-for-agent
 
 ## 后续衔接
 
-本批按 [01 项目基础](./issues/01-project-foundation.md) → [02 收件箱与任务](./issues/02-inbox-tasks.md) → [03 一级子任务](./issues/03-subtasks.md) → [04 项目视图与任务检索](./issues/04-project-views.md) → [05 Markdown 预览](./issues/05-markdown-preview.md) → [06 完成历史与删除](./issues/06-completion-history.md) → [07 今日任务](./issues/07-today-tasks.md) 实施。01、02 与 03 已验收；后续任务在前项验收并提交后再更新状态。每项验收后单独提交，下一项以已提交的前项成果为基础。
+本批按 [01 项目基础](./issues/01-project-foundation.md) → [02 收件箱与任务](./issues/02-inbox-tasks.md) → [03 一级子任务](./issues/03-subtasks.md) → [04 项目视图与任务检索](./issues/04-project-views.md) → [05 Markdown 预览](./issues/05-markdown-preview.md) → [06 完成历史与删除](./issues/06-completion-history.md) → [07 今日任务](./issues/07-today-tasks.md) 实施。01 至 04 已验收；后续任务在前项验收并提交后再更新状态。每项验收后单独提交，下一项以已提交的前项成果为基础。
 
 ## 讨论
 

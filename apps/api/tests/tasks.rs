@@ -42,7 +42,7 @@ async fn send(
 }
 
 async fn json_body(response: Response) -> Value {
-    let body = to_bytes(response.into_body(), 8192).await.unwrap();
+    let body = to_bytes(response.into_body(), 65536).await.unwrap();
     serde_json::from_slice(&body).unwrap()
 }
 
@@ -969,4 +969,254 @@ async fn 子任务数据库约束保护一级层级和项目归属(pool: PgPool)
     let index_count: i64 = sqlx::query_scalar("SELECT count(*) FROM pg_indexes WHERE tablename = 'task' AND indexname = 'task_parent_order_idx'")
         .fetch_one(&pool).await.unwrap();
     assert_eq!(index_count, 1);
+}
+
+#[sqlx::test]
+async fn 任务标签和组合筛选覆盖项目收件箱及子任务(pool: PgPool) {
+    let (app, cookie, csrf) = session(&pool).await;
+    let project = write(
+        &app,
+        "POST",
+        "/projects",
+        &cookie,
+        &csrf,
+        json!({"name":"检索项目"}),
+    )
+    .await;
+    let project_id = json_body(project).await["id"].as_str().unwrap().to_string();
+    let parent = write(
+        &app,
+        "POST",
+        "/tasks",
+        &cookie,
+        &csrf,
+        json!({"title":"撰写方案 100%", "description":"包含技术路线", "project_id":project_id,
+               "status":"in_progress", "priority":"high", "planned_date":"2026-09-28",
+               "due_date":"2026-09-30", "in_backlog":true, "tags":["研究", "紧急"]}),
+    )
+    .await;
+    assert_eq!(parent.status(), StatusCode::CREATED);
+    let parent = json_body(parent).await;
+    let parent_id = parent["id"].as_str().unwrap().to_string();
+    assert_eq!(parent["tags"], json!(["研究", "紧急"]));
+    let child = write(
+        &app,
+        "POST",
+        "/tasks",
+        &cookie,
+        &csrf,
+        json!({"title":"查找资料", "parent_id":parent_id, "project_id":project_id,
+               "status":"todo", "planned_date":"2026-09-28", "tags":["研究"]}),
+    )
+    .await;
+    assert_eq!(child.status(), StatusCode::CREATED);
+    let child_id = json_body(child).await["id"].as_str().unwrap().to_string();
+    let inbox = write(
+        &app,
+        "POST",
+        "/tasks",
+        &cookie,
+        &csrf,
+        json!({"title":"收件箱资料", "tags":["研究"]}),
+    )
+    .await;
+    assert_eq!(inbox.status(), StatusCode::CREATED);
+
+    let query = format!(
+        "/tasks?scope=project&project_id={project_id}&include_subtasks=true&keyword=%E8%B5%84%E6%96%99&planned_date=2026-09-28&tag=%E7%A0%94%E7%A9%B6"
+    );
+    let matching = send(&app, "GET", &query, None, Some(&cookie), None, None).await;
+    assert_eq!(matching.status(), StatusCode::OK);
+    let matching = json_body(matching).await;
+    assert_eq!(matching["items"].as_array().unwrap().len(), 1);
+    assert_eq!(matching["items"][0]["id"], child_id);
+    let all_project = send(
+        &app,
+        "GET",
+        &format!("/tasks?scope=project&project_id={project_id}&include_subtasks=true"),
+        None,
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(
+        json_body(all_project).await["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    let top_only = send(
+        &app,
+        "GET",
+        &format!("/tasks?scope=project&project_id={project_id}"),
+        None,
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(
+        json_body(top_only).await["items"].as_array().unwrap().len(),
+        1
+    );
+    let inbox = send(
+        &app,
+        "GET",
+        "/tasks?scope=inbox&tag=%E7%A0%94%E7%A9%B6",
+        None,
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(json_body(inbox).await["items"].as_array().unwrap().len(), 1);
+    let child_only = send(
+        &app,
+        "GET",
+        &format!("/tasks/{parent_id}/subtasks?status=todo&tag=%E7%A0%94%E7%A9%B6"),
+        None,
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(json_body(child_only).await["items"][0]["id"], child_id);
+    let combined = send(&app, "GET", &format!("/tasks?scope=project&project_id={project_id}&status=in_progress&priority=high&planned_date=2026-09-28&due_date=2026-09-30&tag=%E7%A0%94%E7%A9%B6"), None, Some(&cookie), None, None).await;
+    assert_eq!(json_body(combined).await["items"][0]["id"], parent_id);
+    let literal_percent = send(
+        &app,
+        "GET",
+        &format!("/tasks?scope=project&project_id={project_id}&keyword=%25"),
+        None,
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(
+        json_body(literal_percent).await["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let forbidden = send(&app, "GET", &query, None, None, None, None).await;
+    assert_eq!(forbidden.status(), StatusCode::UNAUTHORIZED);
+
+    let changed = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{parent_id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":1, "tags":["资料"]}),
+    )
+    .await;
+    assert_eq!(changed.status(), StatusCode::OK);
+    assert_eq!(json_body(changed).await["tags"], json!(["资料"]));
+    let old_tag = send(
+        &app,
+        "GET",
+        &format!("/tasks?scope=project&project_id={project_id}&tag=%E7%A0%94%E7%A9%B6"),
+        None,
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert!(
+        json_body(old_tag).await["items"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let duplicate = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{parent_id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":2, "title":"不会保存", "tags":["资料", "资料"]}),
+    )
+    .await;
+    assert_eq!(duplicate.status(), StatusCode::BAD_REQUEST);
+    let current = send(
+        &app,
+        "GET",
+        &format!("/tasks/{parent_id}"),
+        None,
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    let current = json_body(current).await;
+    assert_eq!(current["title"], "撰写方案 100%");
+    assert_eq!(current["version"], 2);
+    let stale = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{parent_id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":1, "tags":[]}),
+    )
+    .await;
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
+}
+
+#[sqlx::test]
+async fn 任务筛选分页限制和稳定顺序(pool: PgPool) {
+    let (app, cookie, _csrf) = session(&pool).await;
+    sqlx::query("INSERT INTO task (title, created_at) SELECT '分页任务 ' || n, TIMESTAMPTZ '2026-09-27 00:00:00+00' FROM generate_series(1, 55) AS n")
+        .execute(&pool).await.unwrap();
+    let first = send(
+        &app,
+        "GET",
+        "/tasks?scope=inbox&page=1",
+        None,
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    let first = json_body(first).await;
+    assert_eq!(first["items"].as_array().unwrap().len(), 50);
+    assert_eq!(first["has_more"], true);
+    let second = send(
+        &app,
+        "GET",
+        "/tasks?scope=inbox&page=2",
+        None,
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    let second = json_body(second).await;
+    assert_eq!(second["items"].as_array().unwrap().len(), 5);
+    assert_eq!(second["has_more"], false);
+    let first_last: i64 = first["items"][49]["id"].as_str().unwrap().parse().unwrap();
+    let second_first: i64 = second["items"][0]["id"].as_str().unwrap().parse().unwrap();
+    assert!(first_last > second_first);
+    for query in [
+        "page=0",
+        "page=100001",
+        "planned_date=2026-99-99",
+        "status=unknown",
+    ] {
+        let invalid = send(
+            &app,
+            "GET",
+            &format!("/tasks?scope=inbox&{query}"),
+            None,
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    }
 }

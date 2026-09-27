@@ -8,7 +8,7 @@ use axum::{
     routing::get,
 };
 use serde::{Deserialize, Deserializer, Serialize};
-use sqlx::{FromRow, Postgres, Transaction, types::chrono::NaiveDate};
+use sqlx::{FromRow, PgPool, Postgres, Transaction, types::chrono::NaiveDate};
 use utoipa::ToSchema;
 
 use crate::{ApiError, ErrorCode, auth::PrivateState};
@@ -94,6 +94,7 @@ struct TaskRow {
     planned_date: Option<NaiveDate>,
     due_date: Option<NaiveDate>,
     in_backlog: bool,
+    tags: Vec<String>,
     version: i64,
 }
 
@@ -109,6 +110,7 @@ pub(super) struct TaskResponse {
     planned_date: Option<String>,
     due_date: Option<String>,
     in_backlog: bool,
+    tags: Vec<String>,
     version: i64,
 }
 
@@ -125,6 +127,7 @@ impl From<TaskRow> for TaskResponse {
             planned_date: row.planned_date.map(|date| date.to_string()),
             due_date: row.due_date.map(|date| date.to_string()),
             in_backlog: row.in_backlog,
+            tags: row.tags,
             version: row.version,
         }
     }
@@ -141,7 +144,20 @@ pub(super) struct TaskPage {
 pub(super) struct ListQuery {
     scope: String,
     project_id: Option<String>,
+    include_subtasks: Option<bool>,
     page: Option<i64>,
+    #[serde(flatten)]
+    filters: SearchFilters,
+}
+
+#[derive(Default, Deserialize)]
+pub(super) struct SearchFilters {
+    keyword: Option<String>,
+    status: Option<TaskStatus>,
+    priority: Option<TaskPriority>,
+    planned_date: Option<String>,
+    due_date: Option<String>,
+    tag: Option<String>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -155,6 +171,7 @@ pub(super) struct CreateTask {
     planned_date: Option<String>,
     due_date: Option<String>,
     in_backlog: Option<bool>,
+    tags: Option<Vec<String>>,
 }
 
 fn present_nullable<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
@@ -183,6 +200,7 @@ pub(super) struct UpdateTask {
     #[serde(default, deserialize_with = "present_nullable")]
     due_date: Option<Option<String>>,
     in_backlog: Option<bool>,
+    tags: Option<Vec<String>>,
 }
 
 fn failure(status: StatusCode, code: ErrorCode, message: &str) -> TaskFailure {
@@ -301,6 +319,98 @@ fn date(raw: Option<String>) -> Result<Option<NaiveDate>, TaskFailure> {
     }
 }
 
+fn normalize_tags(raw: Vec<String>) -> Result<Vec<String>, TaskFailure> {
+    if raw.len() > 20 {
+        return Err(invalid("任务标签不能超过 20 个"));
+    }
+    let mut tags = Vec::with_capacity(raw.len());
+    let mut seen = std::collections::HashSet::new();
+    for value in raw {
+        let name = value.trim();
+        if name.is_empty() || name.chars().count() > 40 || name.chars().any(char::is_control) {
+            return Err(invalid("任务标签无效"));
+        }
+        if !seen.insert(name.to_lowercase()) {
+            return Err(invalid("任务标签不能重复"));
+        }
+        tags.push(name.to_string());
+    }
+    tags.sort_by_key(|name| name.to_lowercase());
+    Ok(tags)
+}
+
+async fn replace_tags(
+    tx: &mut Transaction<'_, Postgres>,
+    task_id: i64,
+    tags: &[String],
+) -> Result<(), TaskFailure> {
+    sqlx::query("DELETE FROM task_tag_link WHERE task_id = $1")
+        .bind(task_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|_| unavailable())?;
+    for name in tags {
+        sqlx::query("INSERT INTO task_tag (name) VALUES ($1) ON CONFLICT DO NOTHING")
+            .bind(name)
+            .execute(&mut **tx)
+            .await
+            .map_err(|_| unavailable())?;
+        sqlx::query("INSERT INTO task_tag_link (task_id, tag_id) SELECT $1, id FROM task_tag WHERE lower(name) = lower($2)")
+            .bind(task_id)
+            .bind(name)
+            .execute(&mut **tx)
+            .await
+            .map_err(|_| unavailable())?;
+    }
+    Ok(())
+}
+
+struct ValidatedFilters {
+    keyword: Option<String>,
+    status: Option<&'static str>,
+    priority: Option<&'static str>,
+    planned_date: Option<NaiveDate>,
+    due_date: Option<NaiveDate>,
+    tag: Option<String>,
+}
+
+fn validate_filters(filters: SearchFilters) -> Result<ValidatedFilters, TaskFailure> {
+    let keyword = filters.keyword.and_then(|value| {
+        let value = value.trim().to_string();
+        (!value.is_empty()).then_some(value)
+    });
+    if keyword
+        .as_ref()
+        .is_some_and(|value| value.chars().count() > 200)
+    {
+        return Err(invalid("关键词过长"));
+    }
+    let keyword = keyword.map(|value| {
+        format!(
+            "%{}%",
+            value
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_")
+        )
+    });
+    let tag = filters.tag.and_then(|value| {
+        let value = value.trim().to_string();
+        (!value.is_empty()).then_some(value)
+    });
+    if tag.as_ref().is_some_and(|value| value.chars().count() > 40) {
+        return Err(invalid("任务标签无效"));
+    }
+    Ok(ValidatedFilters {
+        keyword,
+        status: filters.status.map(TaskStatus::as_str),
+        priority: filters.priority.map(TaskPriority::as_str),
+        planned_date: date(filters.planned_date)?,
+        due_date: date(filters.due_date)?,
+        tag,
+    })
+}
+
 async fn project_name(
     tx: &mut Transaction<'_, Postgres>,
     id: i64,
@@ -347,11 +457,57 @@ async fn record_completion(
     Ok(())
 }
 
-const FIELDS: &str = "id, parent_id, project_id, title, description, status, priority, planned_date, due_date, in_backlog, version";
+const FIELDS: &str = "id, parent_id, project_id, title, description, status, priority, planned_date, due_date, in_backlog, ARRAY(SELECT tag.name FROM task_tag AS tag JOIN task_tag_link AS link ON link.tag_id = tag.id WHERE link.task_id = task.id ORDER BY lower(tag.name), tag.name) AS tags, version";
+
+async fn search_tasks(
+    pool: &PgPool,
+    scope: &str,
+    scope_id: Option<i64>,
+    include_subtasks: bool,
+    page: i64,
+    filters: ValidatedFilters,
+) -> Result<TaskPage, TaskFailure> {
+    let statement = format!(
+        "SELECT {FIELDS} FROM task WHERE \
+         (($1::TEXT = 'subtasks' AND parent_id = $2) OR \
+          ($1 = 'project' AND project_id = $2 AND ($3 OR parent_id IS NULL)) OR \
+          ($1 = 'inbox' AND project_id IS NULL AND ($3 OR parent_id IS NULL))) \
+         AND ($4::TEXT IS NULL OR title ILIKE $4 ESCAPE '\\' OR description ILIKE $4 ESCAPE '\\') \
+         AND ($5::TEXT IS NULL OR status = $5) \
+         AND ($6::TEXT IS NULL OR priority = $6) \
+         AND ($7::DATE IS NULL OR planned_date = $7) \
+         AND ($8::DATE IS NULL OR due_date = $8) \
+         AND ($9::TEXT IS NULL OR EXISTS \
+              (SELECT 1 FROM task_tag_link AS link JOIN task_tag AS tag ON tag.id = link.tag_id \
+               WHERE link.task_id = task.id AND lower(tag.name) = lower($9))) \
+         ORDER BY task.created_at DESC, task.id DESC LIMIT 51 OFFSET $10"
+    );
+    let mut rows: Vec<TaskRow> = sqlx::query_as(&statement)
+        .bind(scope)
+        .bind(scope_id)
+        .bind(include_subtasks)
+        .bind(filters.keyword)
+        .bind(filters.status)
+        .bind(filters.priority)
+        .bind(filters.planned_date)
+        .bind(filters.due_date)
+        .bind(filters.tag)
+        .bind((page - 1) * 50)
+        .fetch_all(pool)
+        .await
+        .map_err(|_| unavailable())?;
+    let has_more = rows.len() > 50;
+    rows.truncate(50);
+    Ok(TaskPage {
+        items: rows.into_iter().map(Into::into).collect(),
+        page,
+        has_more,
+    })
+}
 
 #[utoipa::path(
     get, path = "/tasks", operation_id = "list_tasks", security(("admin_session" = [])),
-    params(("scope" = String, Query, description = "inbox 或 project"), ("project_id" = Option<String>, Query), ("page" = Option<i64>, Query)),
+    params(("scope" = String, Query, description = "inbox 或 project"), ("project_id" = Option<String>, Query), ("include_subtasks" = Option<bool>, Query), ("page" = Option<i64>, Query), ("keyword" = Option<String>, Query), ("status" = Option<TaskStatus>, Query), ("priority" = Option<TaskPriority>, Query), ("planned_date" = Option<String>, Query), ("due_date" = Option<String>, Query), ("tag" = Option<String>, Query)),
     responses((status = 200, body = TaskPage), (status = 400, body = ApiError), (status = 401, body = ApiError), (status = 404, body = ApiError), (status = 503, body = ApiError))
 )]
 pub(super) async fn list(
@@ -382,27 +538,28 @@ pub(super) async fn list(
             ));
         }
     }
-    let statement = format!(
-        "SELECT {FIELDS} FROM task WHERE parent_id IS NULL AND project_id IS NOT DISTINCT FROM $1::BIGINT ORDER BY created_at DESC, id DESC LIMIT 51 OFFSET $2"
-    );
-    let mut rows: Vec<TaskRow> = sqlx::query_as(&statement)
-        .bind(project_id)
-        .bind((page - 1) * 50)
-        .fetch_all(&state.pool)
-        .await
-        .map_err(|_| unavailable())?;
-    let has_more = rows.len() > 50;
-    rows.truncate(50);
-    Ok(Json(TaskPage {
-        items: rows.into_iter().map(Into::into).collect(),
-        page,
-        has_more,
-    }))
+    let filters = validate_filters(query.filters)?;
+    let scope = if project_id.is_some() {
+        "project"
+    } else {
+        "inbox"
+    };
+    Ok(Json(
+        search_tasks(
+            &state.pool,
+            scope,
+            project_id,
+            query.include_subtasks.unwrap_or(false),
+            page,
+            filters,
+        )
+        .await?,
+    ))
 }
 
 #[utoipa::path(
     get, path = "/tasks/{id}/subtasks", operation_id = "list_subtasks", security(("admin_session" = [])),
-    params(("id" = String, Path), ("page" = Option<i64>, Query)),
+    params(("id" = String, Path), ("page" = Option<i64>, Query), ("keyword" = Option<String>, Query), ("status" = Option<TaskStatus>, Query), ("priority" = Option<TaskPriority>, Query), ("planned_date" = Option<String>, Query), ("due_date" = Option<String>, Query), ("tag" = Option<String>, Query)),
     responses((status = 200, body = TaskPage), (status = 400, body = ApiError), (status = 401, body = ApiError), (status = 404, body = ApiError), (status = 503, body = ApiError))
 )]
 pub(super) async fn list_subtasks(
@@ -424,27 +581,17 @@ pub(super) async fn list_subtasks(
     if !exists {
         return Err(missing());
     }
-    let statement = format!(
-        "SELECT {FIELDS} FROM task WHERE parent_id = $1 ORDER BY created_at DESC, id DESC LIMIT 51 OFFSET $2"
-    );
-    let mut rows: Vec<TaskRow> = sqlx::query_as(&statement)
-        .bind(id)
-        .bind((page - 1) * 50)
-        .fetch_all(&state.pool)
-        .await
-        .map_err(|_| unavailable())?;
-    let has_more = rows.len() > 50;
-    rows.truncate(50);
-    Ok(Json(TaskPage {
-        items: rows.into_iter().map(Into::into).collect(),
-        page,
-        has_more,
-    }))
+    let filters = validate_filters(query.filters)?;
+    Ok(Json(
+        search_tasks(&state.pool, "subtasks", Some(id), false, page, filters).await?,
+    ))
 }
 
 #[derive(Deserialize)]
 pub(super) struct SubtaskQuery {
     page: Option<i64>,
+    #[serde(flatten)]
+    filters: SearchFilters,
 }
 
 #[utoipa::path(
@@ -475,6 +622,7 @@ pub(super) async fn create(
     }
     let planned_date = date(input.planned_date)?;
     let due_date = date(input.due_date)?;
+    let tags = normalize_tags(input.tags.unwrap_or_default())?;
     let status = input.status.unwrap_or(TaskStatus::Todo);
     let mut tx = state.pool.begin().await.map_err(|_| unavailable())?;
     if let Some(id) = parent_id {
@@ -505,11 +653,18 @@ pub(super) async fn create(
         .fetch_one(&mut *tx)
         .await
         .map_err(|_| unavailable())?;
+    replace_tags(&mut tx, row.id, &tags).await?;
     if status == TaskStatus::Completed {
         record_completion(&mut tx, &row).await?;
     }
+    let statement = format!("SELECT {FIELDS} FROM task WHERE id = $1");
+    let saved: TaskRow = sqlx::query_as(&statement)
+        .bind(row.id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| unavailable())?;
     tx.commit().await.map_err(|_| unavailable())?;
-    Ok((StatusCode::CREATED, Json(row.into())))
+    Ok((StatusCode::CREATED, Json(saved.into())))
 }
 
 #[utoipa::path(
@@ -532,7 +687,7 @@ pub(super) async fn detail(
 
 #[utoipa::path(
     patch, path = "/tasks/{id}", operation_id = "update_task", security(("admin_session" = [])),
-    description = "缺省字段保持原值；parent_id、project_id、description、priority、planned_date、due_date 的 null 清空；title、status、in_backlog 的 null 与缺省等效。移动到收件箱时，若未指定 in_backlog，会自动离开待规划区。",
+    description = "缺省字段保持原值；parent_id、project_id、description、priority、planned_date、due_date 的 null 清空；tags 传数组替换所有任务标签；title、status、in_backlog 的 null 与缺省等效。移动到收件箱时，若未指定 in_backlog，会自动离开待规划区。",
     params(("id" = String, Path), ("x-csrf-token" = String, Header)), request_body = UpdateTask,
     responses((status = 200, body = TaskResponse), (status = 400, body = ApiError), (status = 401, body = ApiError), (status = 403, body = ApiError), (status = 404, body = ApiError), (status = 409, body = ApiError), (status = 503, body = ApiError))
 )]
@@ -543,6 +698,7 @@ pub(super) async fn update(
 ) -> Result<Json<TaskResponse>, TaskFailure> {
     let id = parse_id(&id)?;
     let Json(input) = input.map_err(|_| invalid("请求无效"))?;
+    let requested_tags = input.tags.map(normalize_tags).transpose()?;
     if input.expected_version < 1 {
         return Err(invalid("版本无效"));
     }
@@ -594,6 +750,9 @@ pub(super) async fn update(
     if let Some(value) = input.in_backlog {
         row.in_backlog = value;
     }
+    if let Some(tags) = &requested_tags {
+        row.tags = tags.clone();
+    }
     if row.project_id.is_none() && row.in_backlog {
         return Err(invalid("收件箱任务不能进入待规划区"));
     }
@@ -622,9 +781,18 @@ pub(super) async fn update(
         .fetch_one(&mut *tx)
         .await
         .map_err(|_| unavailable())?;
+    if let Some(tags) = &requested_tags {
+        replace_tags(&mut tx, id, tags).await?;
+    }
     if newly_completed {
         record_completion(&mut tx, &saved).await?;
     }
+    let statement = format!("SELECT {FIELDS} FROM task WHERE id = $1");
+    let saved: TaskRow = sqlx::query_as(&statement)
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| unavailable())?;
     tx.commit().await.map_err(|_| unavailable())?;
     Ok(Json(saved.into()))
 }

@@ -12,6 +12,7 @@ import {
   listTasks,
   updateTask,
   type Task,
+  type TaskFilters,
   type TaskPriority,
   type TaskStatus,
 } from "../tasks";
@@ -22,6 +23,19 @@ const projects = ref<Project[]>([]);
 const tasks = ref<Task[]>([]);
 const page = ref(1);
 const hasMore = ref(false);
+const viewMode = ref<"list" | "board">("list");
+const filterForm = reactive({
+  keyword: "",
+  status: "",
+  priority: "",
+  planned_date: "",
+  due_date: "",
+  tag: "",
+});
+const activeFilters = ref<TaskFilters>({});
+const hasActiveFilters = computed(() =>
+  Object.values(activeFilters.value).some(Boolean),
+);
 const busy = ref(false);
 const error = ref("");
 const notice = ref("");
@@ -52,6 +66,7 @@ const createForm = reactive({
   planned_date: "",
   due_date: "",
   in_backlog: false,
+  tags: "",
 });
 const editForm = reactive({
   title: "",
@@ -62,6 +77,7 @@ const editForm = reactive({
   planned_date: "",
   due_date: "",
   in_backlog: false,
+  tags: "",
 });
 
 const statusOptions: { value: TaskStatus; label: string }[] = [
@@ -76,6 +92,50 @@ const priorityOptions: { value: TaskPriority; label: string }[] = [
   { value: "high", label: "高" },
   { value: "urgent", label: "紧急" },
 ];
+const boardColumns = [
+  { key: "backlog", label: "待规划区" },
+  ...statusOptions.map((item) => ({ key: item.value, label: item.label })),
+];
+
+function tasksInColumn(key: string) {
+  return tasks.value.filter((task) =>
+    key === "backlog"
+      ? task.in_backlog
+      : !task.in_backlog && task.status === key,
+  );
+}
+
+function parseTags(value: string) {
+  return value
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
+function applyFilters() {
+  activeFilters.value = {
+    keyword: filterForm.keyword.trim() || undefined,
+    status: (filterForm.status || undefined) as TaskStatus | undefined,
+    priority: (filterForm.priority || undefined) as TaskPriority | undefined,
+    planned_date: filterForm.planned_date || undefined,
+    due_date: filterForm.due_date || undefined,
+    tag: filterForm.tag.trim() || undefined,
+  };
+  page.value = 1;
+  void loadTasks();
+}
+
+function clearFilters() {
+  Object.assign(filterForm, {
+    keyword: "",
+    status: "",
+    priority: "",
+    planned_date: "",
+    due_date: "",
+    tag: "",
+  });
+  applyFilters();
+}
 
 function statusLabel(value: TaskStatus) {
   return statusOptions.find((item) => item.value === value)?.label ?? value;
@@ -116,7 +176,11 @@ async function loadProjects() {
 
 async function loadTasks() {
   try {
-    const result = await listTasks(page.value, selectedProjectId.value || null);
+    const result = await listTasks(
+      page.value,
+      selectedProjectId.value || null,
+      activeFilters.value,
+    );
     tasks.value = result.items;
     hasMore.value = result.has_more;
     error.value = "";
@@ -156,6 +220,7 @@ function clearCreate() {
   createForm.planned_date = "";
   createForm.due_date = "";
   createForm.in_backlog = false;
+  createForm.tags = "";
 }
 
 async function submitCreate() {
@@ -175,6 +240,7 @@ async function submitCreate() {
       planned_date: createForm.planned_date || null,
       due_date: createForm.due_date || null,
       in_backlog: createForm.in_backlog,
+      tags: parseTags(createForm.tags),
     });
     const target = createForm.project_id;
     clearCreate();
@@ -207,6 +273,7 @@ async function beginEdit(task: Task) {
   editForm.planned_date = task.planned_date ?? "";
   editForm.due_date = task.due_date ?? "";
   editForm.in_backlog = task.in_backlog;
+  editForm.tags = task.tags.join(", ");
   error.value = "";
   if (!task.parent_id) {
     try {
@@ -299,6 +366,7 @@ async function saveEdit(confirmed = false) {
       planned_date: editForm.planned_date || null,
       due_date: editForm.due_date || null,
       in_backlog: editForm.in_backlog,
+      tags: parseTags(editForm.tags),
     });
     editingTask.value = null;
     subtasks.value = [];
@@ -402,6 +470,12 @@ async function saveEdit(confirmed = false) {
               ><input id="new-due" v-model="createForm.due_date" type="date" />
             </div>
           </div>
+          <label for="new-tags">任务标签（逗号分隔）</label>
+          <input
+            id="new-tags"
+            v-model="createForm.tags"
+            placeholder="例如：写作, 研究"
+          />
           <label class="check"
             ><input
               v-model="createForm.in_backlog"
@@ -427,7 +501,7 @@ async function saveEdit(confirmed = false) {
             <h2 id="list-title">
               {{ selectedProjectId ? selectedProjectName : "收件箱" }}
             </h2>
-            <p class="subtle">任务列表</p>
+            <p class="subtle">每页最多 50 项，包含一级子任务。</p>
           </div>
           <div class="scope">
             <label for="task-scope">查看范围</label
@@ -447,6 +521,82 @@ async function saveEdit(confirmed = false) {
             </select>
           </div>
         </div>
+        <form
+          class="card filters"
+          aria-label="筛选任务"
+          @submit.prevent="applyFilters"
+        >
+          <div class="fields">
+            <div>
+              <label for="filter-keyword">关键词</label
+              ><input id="filter-keyword" v-model="filterForm.keyword" />
+            </div>
+            <div>
+              <label for="filter-status">状态</label>
+              <select id="filter-status" v-model="filterForm.status">
+                <option value="">全部状态</option>
+                <option
+                  v-for="item in statusOptions"
+                  :key="item.value"
+                  :value="item.value"
+                >
+                  {{ item.label }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label for="filter-priority">优先级</label>
+              <select id="filter-priority" v-model="filterForm.priority">
+                <option value="">全部优先级</option>
+                <option
+                  v-for="item in priorityOptions"
+                  :key="item.value"
+                  :value="item.value"
+                >
+                  {{ item.label }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label for="filter-planned">计划日期</label
+              ><input
+                id="filter-planned"
+                v-model="filterForm.planned_date"
+                type="date"
+              />
+            </div>
+            <div>
+              <label for="filter-due">截止日期</label
+              ><input
+                id="filter-due"
+                v-model="filterForm.due_date"
+                type="date"
+              />
+            </div>
+            <div>
+              <label for="filter-tag">任务标签</label
+              ><input id="filter-tag" v-model="filterForm.tag" />
+            </div>
+          </div>
+          <div class="filter-actions">
+            <Button html-type="submit" type="primary" theme="solid"
+              >筛选</Button
+            >
+            <Button theme="borderless" @click="clearFilters">清除筛选</Button>
+          </div>
+        </form>
+        <div v-if="selectedProjectId" class="view-switch" aria-label="项目视图">
+          <Button
+            :theme="viewMode === 'list' ? 'solid' : 'outline'"
+            @click="viewMode = 'list'"
+            >列表</Button
+          >
+          <Button
+            :theme="viewMode === 'board' ? 'solid' : 'outline'"
+            @click="viewMode = 'board'"
+            >看板</Button
+          >
+        </div>
         <p v-if="error" class="message error" role="alert">
           {{ error }}
           <Button
@@ -457,23 +607,71 @@ async function saveEdit(confirmed = false) {
           >
         </p>
         <p v-if="notice" class="message success" role="status">{{ notice }}</p>
-        <div v-if="tasks.length === 0" class="empty">这里还没有任务。</div>
-        <ul v-else class="task-list">
+        <div v-if="tasks.length === 0" class="empty">
+          {{
+            hasActiveFilters ? "没有符合筛选条件的任务。" : "这里还没有任务。"
+          }}
+        </div>
+        <ul
+          v-else-if="!selectedProjectId || viewMode === 'list'"
+          class="task-list"
+          aria-label="任务列表"
+        >
           <li v-for="task in tasks" :key="task.id" class="task-card">
             <div class="task-main">
-              <h3>{{ task.title }}</h3>
+              <h3>{{ task.parent_id ? "↳ " : "" }}{{ task.title }}</h3>
               <div class="meta">
                 <span>{{ statusLabel(task.status) }}</span
+                ><span v-if="task.parent_id">子任务</span
                 ><span v-if="task.in_backlog">待规划区</span
                 ><span>{{ priorityLabel(task.priority) }}</span
                 ><span v-if="task.planned_date"
                   >计划 {{ task.planned_date }}</span
-                ><span v-if="task.due_date">截止 {{ task.due_date }}</span>
+                ><span v-if="task.due_date">截止 {{ task.due_date }}</span
+                ><span v-for="tag in task.tags" :key="tag">#{{ tag }}</span>
               </div>
             </div>
             <Button theme="borderless" @click="beginEdit(task)">编辑</Button>
           </li>
         </ul>
+        <div v-else class="board" aria-label="任务看板">
+          <section
+            v-for="column in boardColumns"
+            :key="column.key"
+            class="board-column"
+            :aria-label="column.label"
+          >
+            <h3>
+              {{ column.label }}
+              <span>{{ tasksInColumn(column.key).length }}</span>
+            </h3>
+            <ul class="task-list">
+              <li
+                v-for="task in tasksInColumn(column.key)"
+                :key="task.id"
+                class="task-card"
+              >
+                <div class="task-main">
+                  <h3>{{ task.parent_id ? "↳ " : "" }}{{ task.title }}</h3>
+                  <div class="meta">
+                    <span v-if="task.parent_id">子任务</span>
+                    <span v-if="task.in_backlog">{{
+                      statusLabel(task.status)
+                    }}</span>
+                    <span v-if="task.planned_date"
+                      >计划 {{ task.planned_date }}</span
+                    >
+                    <span v-if="task.due_date">截止 {{ task.due_date }}</span>
+                    <span v-for="tag in task.tags" :key="tag">#{{ tag }}</span>
+                  </div>
+                </div>
+                <Button theme="borderless" @click="beginEdit(task)"
+                  >编辑</Button
+                >
+              </li>
+            </ul>
+          </section>
+        </div>
         <nav
           v-if="page > 1 || hasMore"
           class="pagination"
@@ -589,6 +787,8 @@ async function saveEdit(confirmed = false) {
               ><input id="edit-due" v-model="editForm.due_date" type="date" />
             </div>
           </div>
+          <label for="edit-tags">任务标签（逗号分隔）</label>
+          <input id="edit-tags" v-model="editForm.tags" />
           <label class="check"
             ><input
               v-model="editForm.in_backlog"
@@ -826,6 +1026,49 @@ select:focus-visible {
 .list-heading {
   margin-bottom: 1rem;
 }
+.filters {
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+.filters .fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 0;
+}
+.filter-actions,
+.view-switch {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  margin-top: 1rem;
+}
+.view-switch {
+  margin-bottom: 1rem;
+}
+.board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(13rem, 1fr));
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.75rem;
+}
+.board-column {
+  background: #e9edf4;
+  border-radius: 0.7rem;
+  padding: 0.75rem;
+  min-height: 10rem;
+}
+.board-column > h3 {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0.2rem 0.8rem;
+}
+.board-column .task-card {
+  display: block;
+  padding: 0.9rem;
+}
+.board-column .task-card button {
+  margin-top: 0.6rem;
+}
 .scope {
   display: flex;
   align-items: center;
@@ -919,9 +1162,13 @@ select:focus-visible {
     align-items: flex-start;
     flex-direction: column;
   }
+  .filters .fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @media (max-width: 450px) {
-  .fields {
+  .fields,
+  .filters .fields {
     grid-template-columns: 1fr;
   }
 }

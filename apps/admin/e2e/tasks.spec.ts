@@ -5,6 +5,7 @@ test("收件箱任务归入项目、完成及冲突后保留编辑", async ({ pa
   let conflict = false;
   let task: {
     id: string;
+    parent_id: string | null;
     project_id: string | null;
     title: string;
     description: string;
@@ -13,6 +14,7 @@ test("收件箱任务归入项目、完成及冲突后保留编辑", async ({ pa
     planned_date: string | null;
     due_date: string | null;
     in_backlog: boolean;
+    tags: string[];
     version: number;
   } | null = null;
   const project = {
@@ -53,6 +55,7 @@ test("收件箱任务归入项目、完成及冲突后保留编辑", async ({ pa
       const input = request.postDataJSON();
       task = {
         id: "9007199254740994",
+        parent_id: null,
         project_id: input.project_id ?? null,
         title: input.title,
         description: input.description ?? "",
@@ -61,6 +64,7 @@ test("收件箱任务归入项目、完成及冲突后保留编辑", async ({ pa
         planned_date: input.planned_date ?? null,
         due_date: input.due_date ?? null,
         in_backlog: input.in_backlog ?? false,
+        tags: input.tags ?? [],
         version: 1,
       };
       await route.fulfill({
@@ -162,6 +166,7 @@ test("创建和维护一级子任务时提示未完成步骤", async ({ page }) 
     planned_date: null,
     due_date: null,
     in_backlog: false,
+    tags: [],
     version: 1,
   };
   let child: typeof parent | null = null;
@@ -278,4 +283,146 @@ test("创建和维护一级子任务时提示未完成步骤", async ({ page }) 
     page.getByRole("listitem").getByText("已完成", { exact: true }),
   ).toBeVisible();
   expect(child?.status).toBe("in_progress");
+});
+
+test("项目列表和看板共用筛选结果且切换不写入任务", async ({ page }) => {
+  let active = false;
+  let writes = 0;
+  let reads = 0;
+  const project = {
+    id: "9007199254740993",
+    name: "检索项目",
+    version: 1,
+    completed_at: null,
+    archived_at: null,
+  };
+  const base = {
+    project_id: project.id,
+    description: "",
+    priority: null,
+    planned_date: null,
+    due_date: null,
+    in_backlog: false,
+    tags: [] as string[],
+    version: 1,
+  };
+  const tasks = [
+    {
+      ...base,
+      id: "11",
+      parent_id: null,
+      title: "制定方案",
+      status: "todo",
+      in_backlog: true,
+      tags: ["研究"],
+    },
+    {
+      ...base,
+      id: "12",
+      parent_id: "11",
+      title: "查找资料",
+      status: "in_progress",
+      planned_date: "2026-09-29",
+      tags: ["研究"],
+    },
+    {
+      ...base,
+      id: "13",
+      parent_id: null,
+      title: "提交成果",
+      status: "completed",
+      priority: "high",
+      tags: ["交付"],
+    },
+  ];
+  await page.route("**/api/auth/**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/auth/login")
+      active = true;
+    await route.fulfill({
+      status: active ? 200 : 401,
+      contentType: "application/json",
+      body: JSON.stringify(
+        active
+          ? { username: "owner", csrf_token: "csrf-test" }
+          : { code: "unauthorized", message: "请先登录", request_id: "test" },
+      ),
+    });
+  });
+  await page.route(/\/api\/projects(?:\/|\?|$)/, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ items: [project], page: 1, has_more: false }),
+    }),
+  );
+  await page.route(/\/api\/tasks(?:\/|\?|$)/, async (route) => {
+    if (route.request().method() !== "GET") writes++;
+    reads++;
+    const url = new URL(route.request().url());
+    const visible =
+      url.searchParams.get("scope") === "project"
+        ? tasks.filter(
+            (task) =>
+              (!url.searchParams.get("keyword") ||
+                task.title.includes(url.searchParams.get("keyword")!)) &&
+              (!url.searchParams.get("status") ||
+                task.status === url.searchParams.get("status")) &&
+              (!url.searchParams.get("priority") ||
+                task.priority === url.searchParams.get("priority")) &&
+              (!url.searchParams.get("planned_date") ||
+                task.planned_date === url.searchParams.get("planned_date")) &&
+              (!url.searchParams.get("tag") ||
+                task.tags.includes(url.searchParams.get("tag")!)),
+          )
+        : [];
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ items: visible, page: 1, has_more: false }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByLabel("账号").fill("owner");
+  await page.getByLabel("密码").fill("correct horse battery staple");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await page.getByRole("link", { name: "打开收件箱与任务" }).click();
+  await page.getByLabel("查看范围").selectOption(project.id);
+  await expect(
+    page.getByRole("list", { name: "任务列表" }).getByRole("listitem"),
+  ).toHaveCount(3);
+  const beforeSwitch = reads;
+  await page.getByRole("button", { name: "看板" }).click();
+  await expect(
+    page.getByRole("region", { name: "待规划区" }).getByText("制定方案"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "进行中" }).getByText("查找资料"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "已完成" }).getByText("提交成果"),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "列表", exact: true }).click();
+  expect(reads).toBe(beforeSwitch);
+  expect(writes).toBe(0);
+
+  await page.getByLabel("关键词").fill("资料");
+  await page
+    .getByLabel("状态", { exact: true })
+    .last()
+    .selectOption("in_progress");
+  await page.getByLabel("计划日期", { exact: true }).last().fill("2026-09-29");
+  await page.getByLabel("任务标签", { exact: true }).fill("研究");
+  await page.getByRole("button", { name: "筛选", exact: true }).click();
+  await expect(
+    page.getByRole("list", { name: "任务列表" }).getByRole("listitem"),
+  ).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "↳ 查找资料" })).toBeVisible();
+  await page.getByRole("button", { name: "看板" }).click();
+  await expect(
+    page.getByRole("region", { name: "进行中" }).getByText("查找资料"),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "清除筛选" }).click();
+  await expect(
+    page.getByRole("region", { name: "已完成" }).getByText("提交成果"),
+  ).toBeVisible();
+  expect(writes).toBe(0);
 });
