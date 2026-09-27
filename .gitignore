@@ -3,6 +3,9 @@
 Thumbs.db
 .idea/
 .vscode/
+mise.local.toml
+mise.local.lock
+.codegraph/
 *.swp
 *.swo
 

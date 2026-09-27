@@ -1,6 +1,6 @@
 # 建立 mise 统一工具链与 Rust、前端质量检查
 
-Status: ready-for-agent
+Status: done
 
 ## 目标
 
@@ -37,3 +37,15 @@ Status: ready-for-agent
 ## 讨论
 
 - 2026-09-27：管理者要求所有环境使用 mise，配置 Rust 与前端质量工具，并统一命令入口；据此列为首个工程基础任务。当前仅完成规格，不将计划中的配置视为已经运行验证。
+
+## 验收记录
+
+- 2026-09-27：在 macOS arm64 上使用 mise `2026.6.14` 安装并核对 Rust `1.97.1`、rustfmt、Clippy、Node.js `24.21.0` 和 pnpm `12.3.4`。`mise run setup` 使用 mise 锁定安装、pnpm 冻结锁文件和 Cargo 锁文件通过。
+- `mise run fmt:check`、`mise run lint`、`mise run typecheck`、`mise run check`、`mise run test`、`mise run build`、`mise run ci` 均通过。Rust 的 HTTP 存活接口测试 1 项、前端 API 状态测试 2 项通过。`mise run dev` 启动后，API `http://127.0.0.1:3001/health/live` 与 Vite 代理 `http://127.0.0.1:5173/api/health/live` 都返回 HTTP 200 和 `{"status":"ok"}`；中断后两个端口均不再接受连接。
+- 临时引入格式错误、Rust 未使用变量警告、TypeScript ESLint 错误、ESLint warning 和 Vue 类型错误，确认对应任务返回非零；Vue 类型错误也使 `mise run ci` 失败。`mise run fmt` 修复格式，其他临时改动已还原，最终 CI 再次通过。
+- [GitHub Actions Ubuntu Linux x64 检查](https://github.com/aifuxi/mindfolio/actions/runs/36317736410)通过，耗时 39 秒。仅声明这两个已验证平台；未安装或部署生产服务。
+
+## 遗留问题与下一步
+
+- 本机用户级 mise 配置含其他未锁定的滚动工具，因此 `mise install --locked rust node pnpm` 会打印与本项目无关的警告；项目三项工具仍按锁文件安装且命令成功。GitHub Actions 无此警告。
+- 当前仅有进程存活接口，不代表数据库就绪。下一项任务可按依赖推进 PostgreSQL 迁移（02）或 OpenAPI 类型生成（03）；本任务不包含它们。
