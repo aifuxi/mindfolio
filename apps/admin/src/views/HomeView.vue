@@ -191,6 +191,7 @@ async function logout() {
       <RouterLink class="inbox-link" to="/habits">管理习惯</RouterLink>
       <RouterLink class="inbox-link" to="/journal">每日记录</RouterLink>
       <RouterLink class="inbox-link" to="/weekly-review">每周回顾</RouterLink>
+      <RouterLink class="inbox-link" to="/export">手动导出</RouterLink>
       <RouterLink class="inbox-link" to="/history">查看完成历史</RouterLink>
       <section class="card create-card" aria-labelledby="create-title">
         <div>

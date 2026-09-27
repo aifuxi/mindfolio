@@ -213,6 +213,48 @@
         ]
       }
     },
+    "/export": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "operationId": "download_private_export",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportData"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ]
+      }
+    },
     "/habits": {
       "get": {
         "tags": [
@@ -3541,6 +3583,431 @@
           "not_found",
           "version_conflict"
         ]
+      },
+      "ExportCompletion": {
+        "type": "object",
+        "required": [
+          "id",
+          "task_id",
+          "task_title",
+          "completed_at"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "project_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "task_title": {
+            "type": "string"
+          }
+        }
+      },
+      "ExportData": {
+        "type": "object",
+        "required": [
+          "format_version",
+          "generated_at",
+          "projects",
+          "tasks",
+          "task_tags",
+          "task_tag_links",
+          "task_completions",
+          "habits",
+          "habit_settings",
+          "habit_pauses",
+          "habit_checkins",
+          "daily_journals"
+        ],
+        "properties": {
+          "daily_journals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportJournal"
+            }
+          },
+          "format_version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "generated_at": {
+            "type": "string"
+          },
+          "habit_checkins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportHabitCheckin"
+            }
+          },
+          "habit_pauses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportHabitPause"
+            }
+          },
+          "habit_settings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportHabitSetting"
+            }
+          },
+          "habits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportHabit"
+            }
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportProject"
+            }
+          },
+          "task_completions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportCompletion"
+            }
+          },
+          "task_tag_links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportTagLink"
+            }
+          },
+          "task_tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportTag"
+            }
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportTask"
+            }
+          }
+        }
+      },
+      "ExportHabit": {
+        "type": "object",
+        "required": [
+          "id",
+          "created_on",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "created_on": {
+            "type": "string"
+          },
+          "deleted_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ExportHabitCheckin": {
+        "type": "object",
+        "required": [
+          "id",
+          "habit_id",
+          "business_date",
+          "completed",
+          "note",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "business_date": {
+            "type": "string"
+          },
+          "completed": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "habit_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ExportHabitPause": {
+        "type": "object",
+        "required": [
+          "id",
+          "habit_id",
+          "start_on",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "end_on": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "habit_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "start_on": {
+            "type": "string"
+          }
+        }
+      },
+      "ExportHabitSetting": {
+        "type": "object",
+        "required": [
+          "id",
+          "habit_id",
+          "effective_on",
+          "name",
+          "cadence",
+          "created_at"
+        ],
+        "properties": {
+          "cadence": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "effective_on": {
+            "type": "string"
+          },
+          "habit_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "weekly_target": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "ExportJournal": {
+        "type": "object",
+        "required": [
+          "business_date",
+          "body",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "business_date": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ExportProject": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "archived_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ExportTag": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ExportTagLink": {
+        "type": "object",
+        "required": [
+          "task_id",
+          "tag_id"
+        ],
+        "properties": {
+          "tag_id": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        }
+      },
+      "ExportTask": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "description",
+          "status",
+          "in_backlog",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "in_backlog": {
+            "type": "boolean"
+          },
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "planned_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "priority": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "project_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
       },
       "HabitDetail": {
         "type": "object",

@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { refreshSession } from "./auth";
+import ExportView from "./views/ExportView.vue";
 import HomeView from "./views/HomeView.vue";
 import HabitsView from "./views/HabitsView.vue";
 import JournalView from "./views/JournalView.vue";
@@ -13,6 +14,12 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: "/login", name: "login", component: LoginView },
+    {
+      path: "/export",
+      name: "export",
+      component: ExportView,
+      meta: { requiresAuth: true },
+    },
     {
       path: "/habits",
       name: "habits",

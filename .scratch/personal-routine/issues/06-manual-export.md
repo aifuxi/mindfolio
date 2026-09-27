@@ -1,6 +1,6 @@
 # 实现第一阶段私人数据手动导出
 
-Status: ready-for-agent
+Status: completed
 
 ## 目标
 
@@ -28,3 +28,10 @@ Status: ready-for-agent
 - 依赖任务 05，届时第一阶段私人业务数据结构已齐备。
 - 本任务不实现数据导入、自动备份或第二阶段公开网站数据导出；公开站点信息、文章和友链在第二阶段接入导出。
 - 验收后记录导出字段与检查结果，并单独提交。
+
+## 验收记录
+
+- 2026-09-28：`GET /export` 返回 UTF-8 JSON 附件，根对象包含 `format_version`、`generated_at`，以及 `projects`、`tasks`、`task_tags`、`task_tag_links`、`task_completions`、`habits`、`habit_settings`、`habit_pauses`、`habit_checkins`、`daily_journals` 十个数组。空数据仍输出全部数组，值为 `[]`。
+- 导出字段包含现存对象及保留的任务完成历史；所有业务 ID 为十进制字符串，业务日期为 `YYYY-MM-DD`，时间点为 RFC 3339。认证表、密码哈希、Session 和 CSRF 信息不进入文件。
+- 服务端在同一个 `REPEATABLE READ READ ONLY` 事务内读取全部业务表。私人路由统一设置 `Cache-Control: no-store`；文件名带上海业务日期。浏览器仅在成功响应后触发下载。
+- `mise run ci` 通过，包含真实 PostgreSQL 空数据、完整数据、删除后完成记录、并发写入、权限与响应头测试，以及浏览器失败反馈和文件下载解析流程。

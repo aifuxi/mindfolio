@@ -49,6 +49,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["download_private_export"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/habits": {
         parameters: {
             query?: never;
@@ -541,6 +557,107 @@ export interface components {
         };
         /** @enum {string} */
         ErrorCode: "database_unavailable" | "unauthorized" | "invalid_credentials" | "invalid_request" | "forbidden" | "rate_limited" | "auth_unavailable" | "not_found" | "version_conflict";
+        ExportCompletion: {
+            completed_at: string;
+            id: string;
+            project_name?: string | null;
+            task_id: string;
+            task_title: string;
+        };
+        ExportData: {
+            daily_journals: components["schemas"]["ExportJournal"][];
+            /** Format: int32 */
+            format_version: number;
+            generated_at: string;
+            habit_checkins: components["schemas"]["ExportHabitCheckin"][];
+            habit_pauses: components["schemas"]["ExportHabitPause"][];
+            habit_settings: components["schemas"]["ExportHabitSetting"][];
+            habits: components["schemas"]["ExportHabit"][];
+            projects: components["schemas"]["ExportProject"][];
+            task_completions: components["schemas"]["ExportCompletion"][];
+            task_tag_links: components["schemas"]["ExportTagLink"][];
+            task_tags: components["schemas"]["ExportTag"][];
+            tasks: components["schemas"]["ExportTask"][];
+        };
+        ExportHabit: {
+            created_at: string;
+            created_on: string;
+            deleted_at?: string | null;
+            id: string;
+            updated_at: string;
+            /** Format: int64 */
+            version: number;
+        };
+        ExportHabitCheckin: {
+            business_date: string;
+            completed: boolean;
+            created_at: string;
+            habit_id: string;
+            id: string;
+            note: string;
+            updated_at: string;
+            /** Format: int64 */
+            version: number;
+        };
+        ExportHabitPause: {
+            created_at: string;
+            end_on?: string | null;
+            habit_id: string;
+            id: string;
+            start_on: string;
+        };
+        ExportHabitSetting: {
+            cadence: string;
+            created_at: string;
+            effective_on: string;
+            habit_id: string;
+            id: string;
+            name: string;
+            /** Format: int32 */
+            weekly_target?: number | null;
+        };
+        ExportJournal: {
+            body: string;
+            business_date: string;
+            created_at: string;
+            updated_at: string;
+            /** Format: int64 */
+            version: number;
+        };
+        ExportProject: {
+            archived_at?: string | null;
+            completed_at?: string | null;
+            created_at: string;
+            id: string;
+            name: string;
+            updated_at: string;
+            /** Format: int64 */
+            version: number;
+        };
+        ExportTag: {
+            id: string;
+            name: string;
+        };
+        ExportTagLink: {
+            tag_id: string;
+            task_id: string;
+        };
+        ExportTask: {
+            created_at: string;
+            description: string;
+            due_date?: string | null;
+            id: string;
+            in_backlog: boolean;
+            parent_id?: string | null;
+            planned_date?: string | null;
+            priority?: string | null;
+            project_id?: string | null;
+            status: string;
+            title: string;
+            updated_at: string;
+            /** Format: int64 */
+            version: number;
+        };
         HabitDetail: {
             habit: components["schemas"]["HabitResponse"];
             pauses: components["schemas"]["PauseResponse"][];
@@ -936,6 +1053,41 @@ export interface operations {
                 };
             };
             /** @description 认证服务暂不可用 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    download_private_export: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportData"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
             503: {
                 headers: {
                     [name: string]: unknown;
