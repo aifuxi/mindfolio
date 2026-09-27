@@ -18,7 +18,7 @@ type ProjectFailure = (StatusCode, Json<ApiError>);
 pub(super) fn routes() -> Router<PrivateState> {
     Router::new()
         .route("/projects", get(list).post(create))
-        .route("/projects/{id}", get(detail).patch(rename))
+        .route("/projects/{id}", get(detail).patch(rename).delete(delete))
         .route("/projects/{id}/complete", post(complete))
         .route("/projects/{id}/archive", post(archive))
         .route("/projects/{id}/restore", post(restore))
@@ -108,6 +108,21 @@ fn unavailable() -> ProjectFailure {
         ErrorCode::DatabaseUnavailable,
         "数据库不可用",
     )
+}
+
+fn delete_lock_error(error: sqlx::Error) -> ProjectFailure {
+    if error
+        .as_database_error()
+        .is_some_and(|error| matches!(error.code().as_deref(), Some("55P03" | "40P01")))
+    {
+        failure(
+            StatusCode::CONFLICT,
+            ErrorCode::VersionConflict,
+            "项目正在变更，请刷新后重试",
+        )
+    } else {
+        unavailable()
+    }
 }
 
 fn valid_name(raw: &str) -> Result<String, ProjectFailure> {
@@ -311,4 +326,62 @@ pub(super) async fn restore(
     input: Result<Json<VersionRequest>, JsonRejection>,
 ) -> Result<Json<ProjectResponse>, ProjectFailure> {
     transition(&state, id, input, "restore").await
+}
+
+#[utoipa::path(
+    delete, path = "/projects/{id}", operation_id = "delete_project", security(("admin_session" = [])),
+    description = "删除项目及所属任务和子任务；既有任务完成记录保留。",
+    params(("id" = String, Path), ("x-csrf-token" = String, Header)), request_body = VersionRequest,
+    responses((status = 204), (status = 400, body = ApiError), (status = 401, body = ApiError), (status = 403, body = ApiError), (status = 404, body = ApiError), (status = 409, body = ApiError), (status = 503, body = ApiError))
+)]
+pub(super) async fn delete(
+    State(state): State<PrivateState>,
+    Path(id): Path<String>,
+    input: Result<Json<VersionRequest>, JsonRejection>,
+) -> Result<StatusCode, ProjectFailure> {
+    let id = parse_id(&id)?;
+    let Json(input) = input.map_err(|_| invalid())?;
+    if input.expected_version < 1 {
+        return Err(invalid());
+    }
+    let mut tx = state.pool.begin().await.map_err(|_| unavailable())?;
+    let version: Option<i64> =
+        sqlx::query_scalar("SELECT version FROM project WHERE id = $1 FOR UPDATE NOWAIT")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(delete_lock_error)?;
+    let version =
+        version.ok_or_else(|| failure(StatusCode::NOT_FOUND, ErrorCode::NotFound, "项目不存在"))?;
+    if version != input.expected_version {
+        return Err(failure(
+            StatusCode::CONFLICT,
+            ErrorCode::VersionConflict,
+            "项目已变更，请刷新后重试",
+        ));
+    }
+    let _: Vec<i64> = sqlx::query_scalar(
+        "SELECT id FROM task WHERE project_id = $1 ORDER BY id FOR UPDATE NOWAIT",
+    )
+    .bind(id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(delete_lock_error)?;
+    sqlx::query("DELETE FROM task WHERE project_id = $1 AND parent_id IS NOT NULL")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(delete_lock_error)?;
+    sqlx::query("DELETE FROM task WHERE project_id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(delete_lock_error)?;
+    sqlx::query("DELETE FROM project WHERE id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(delete_lock_error)?;
+    tx.commit().await.map_err(delete_lock_error)?;
+    Ok(StatusCode::NO_CONTENT)
 }

@@ -8,6 +8,7 @@ import { ProjectRequestError, listProjects, type Project } from "../projects";
 import {
   TaskRequestError,
   createTask,
+  deleteTask,
   getTask,
   listSubtasks,
   listTasks,
@@ -45,6 +46,7 @@ const subtasks = ref<Task[]>([]);
 const pendingCompletion = ref(false);
 const createPreview = ref(false);
 const editPreview = ref(false);
+const confirmingDelete = ref(false);
 const childForm = reactive({
   title: "",
   status: "todo" as TaskStatus,
@@ -269,6 +271,7 @@ async function beginEdit(task: Task) {
   editingTask.value = task;
   subtasks.value = [];
   pendingCompletion.value = false;
+  confirmingDelete.value = false;
   editForm.title = task.title;
   editForm.description = task.description;
   editPreview.value = false;
@@ -384,6 +387,25 @@ async function saveEdit(confirmed = false) {
     busy.value = false;
   }
 }
+
+async function confirmDeleteTask() {
+  if (busy.value || !editingTask.value) return;
+  busy.value = true;
+  error.value = "";
+  notice.value = "";
+  try {
+    await deleteTask(editingTask.value);
+    editingTask.value = null;
+    subtasks.value = [];
+    confirmingDelete.value = false;
+    await loadTasks();
+    notice.value = "当前任务已删除，已有完成历史仍保留";
+  } catch (cause) {
+    handleError(cause);
+  } finally {
+    busy.value = false;
+  }
+}
 </script>
 
 <template>
@@ -395,7 +417,10 @@ async function saveEdit(confirmed = false) {
           <h1>收件箱与任务</h1>
           <p class="subtle">已登录：{{ currentSession?.username }}</p>
         </div>
-        <RouterLink to="/">返回项目</RouterLink>
+        <nav class="scope">
+          <RouterLink to="/history">完成历史</RouterLink>
+          <RouterLink to="/">返回项目</RouterLink>
+        </nav>
       </header>
 
       <section class="card create" aria-labelledby="create-title">
@@ -728,6 +753,28 @@ async function saveEdit(confirmed = false) {
           </h2>
           <Button theme="borderless" @click="editingTask = null">关闭</Button>
         </div>
+        <div
+          v-if="confirmingDelete"
+          class="completion-prompt"
+          role="alertdialog"
+          aria-label="确认删除任务"
+        >
+          <p>
+            删除“{{ editingTask.title }}”会移除当前任务{{
+              editingTask.parent_id ? "" : "及其子任务"
+            }}；已有完成历史和当时的名称快照仍保留。删除后无法恢复当前内容。
+          </p>
+          <Button theme="outline" @click="confirmingDelete = false"
+            >取消</Button
+          >
+          <Button
+            type="danger"
+            theme="solid"
+            :loading="busy"
+            @click="confirmDeleteTask"
+            >确认删除任务</Button
+          >
+        </div>
         <Button
           v-if="editingTask.parent_id"
           theme="borderless"
@@ -856,6 +903,12 @@ async function saveEdit(confirmed = false) {
               theme="solid"
               :loading="busy"
               >保存任务</Button
+            >
+            <Button
+              html-type="button"
+              theme="borderless"
+              @click="confirmingDelete = true"
+              >删除任务</Button
             >
           </div>
         </form>

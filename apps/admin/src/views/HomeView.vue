@@ -7,6 +7,7 @@ import {
   ProjectRequestError,
   changeProject,
   createProject,
+  deleteProject,
   listProjects,
   renameProject,
   type Project,
@@ -20,6 +21,7 @@ const includeArchived = ref(false);
 const newName = ref("");
 const editName = ref("");
 const editingId = ref<string | null>(null);
+const deletingId = ref<string | null>(null);
 const busy = ref(false);
 const error = ref("");
 const notice = ref("");
@@ -127,6 +129,27 @@ async function applyAction(
   }
 }
 
+async function confirmDelete(project: Project) {
+  if (busy.value) return;
+  busy.value = true;
+  error.value = "";
+  notice.value = "";
+  try {
+    await deleteProject(project);
+    deletingId.value = null;
+    await load();
+    notice.value = "项目及其当前任务已删除，已有完成历史仍保留";
+  } catch (cause) {
+    if (cause instanceof ProjectRequestError && cause.status === 409) {
+      deletingId.value = null;
+      await load();
+    }
+    handleError(cause);
+  } finally {
+    busy.value = false;
+  }
+}
+
 async function switchArchive() {
   includeArchived.value = !includeArchived.value;
   page.value = 1;
@@ -164,6 +187,7 @@ async function logout() {
           >
         </div>
       </header>
+      <RouterLink class="inbox-link" to="/history">查看完成历史</RouterLink>
       <section class="card create-card" aria-labelledby="create-title">
         <div>
           <h2 id="create-title">新建项目</h2>
@@ -295,6 +319,29 @@ async function logout() {
                 theme="borderless"
                 @click="applyAction(project, 'archive')"
                 >归档</Button
+              >
+              <Button theme="borderless" @click="deletingId = project.id"
+                >删除</Button
+              >
+            </div>
+            <div
+              v-if="deletingId === project.id"
+              class="delete-confirm"
+              role="alertdialog"
+              aria-label="确认删除项目"
+            >
+              <p>
+                删除“{{
+                  project.name
+                }}”会移除项目及其当前任务、子任务；已有完成历史和当时的名称快照仍保留。归档项目可恢复，删除后无法恢复当前内容。
+              </p>
+              <Button theme="outline" @click="deletingId = null">取消</Button>
+              <Button
+                type="danger"
+                theme="solid"
+                :loading="busy"
+                @click="confirmDelete(project)"
+                >确认删除项目</Button
               >
             </div>
           </li>
@@ -456,6 +503,7 @@ input:focus-visible {
 .project-card {
   padding: 1.25rem 1.5rem;
   align-items: flex-start;
+  flex-wrap: wrap;
 }
 .project-main {
   min-width: 0;
@@ -490,6 +538,16 @@ input:focus-visible {
 .edit-form {
   max-width: 34rem;
   margin-top: 1rem;
+}
+.delete-confirm {
+  flex-basis: 100%;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background: #fff4f2;
+  color: #7f2a20;
+}
+.delete-confirm p {
+  margin-top: 0;
 }
 .empty {
   padding: 2.5rem 1.5rem;

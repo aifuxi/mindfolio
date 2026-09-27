@@ -60,7 +60,7 @@ case "${1:-}" in
     cargo run --locked -p mindfolio-api --bin migrate
     cargo run --locked -p mindfolio-api --bin migrate
     "${compose[@]}" exec -T postgres psql -U mindfolio -d mindfolio_verify -v ON_ERROR_STOP=1 -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('admin_account', 'admin_session', 'project', 'task', 'task_completion', 'task_tag', 'task_tag_link')" | grep -qx 7
-    "${compose[@]}" exec -T postgres psql -U mindfolio -d mindfolio_verify -v ON_ERROR_STOP=1 -tAc 'SELECT count(*) FROM _sqlx_migrations WHERE success' | grep -qx 5
+    "${compose[@]}" exec -T postgres psql -U mindfolio -d mindfolio_verify -v ON_ERROR_STOP=1 -tAc 'SELECT count(*) FROM _sqlx_migrations WHERE success' | grep -qx 6
     "${compose[@]}" exec -T postgres psql -U mindfolio -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE mindfolio_verify_bad'
     "${compose[@]}" exec -T postgres psql -U mindfolio -d mindfolio_verify_bad -v ON_ERROR_STOP=1 -c 'CREATE TABLE admin_account (id BIGINT)'
     export DATABASE_URL="postgres://mindfolio:${DB_PASSWORD}@127.0.0.1:${DB_PORT}/mindfolio_verify_bad"

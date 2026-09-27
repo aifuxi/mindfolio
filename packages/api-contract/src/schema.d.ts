@@ -107,7 +107,8 @@ export interface paths {
         get: operations["detail"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** @description 删除项目及所属任务和子任务；既有任务完成记录保留。 */
+        delete: operations["delete_project"];
         options?: never;
         head?: never;
         patch: operations["rename"];
@@ -161,6 +162,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/task-completions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 完成事实按完成时刻倒序；date 按 Asia/Shanghai 业务日期筛选。 */
+        get: operations["list_task_completions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/task-completions/days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 按 Asia/Shanghai 业务日期汇总完成次数，每页最多 50 天。 */
+        get: operations["list_task_completion_days"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks": {
         parameters: {
             query?: never;
@@ -187,7 +222,8 @@ export interface paths {
         get: operations["get_task"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** @description 删除任务时一并删除其一级子任务；既有完成记录保留。 */
+        delete: operations["delete_task"];
         options?: never;
         head?: never;
         /** @description 缺省字段保持原值；parent_id、project_id、description、priority、planned_date、due_date 的 null 清空；tags 传数组替换所有任务标签；title、status、in_backlog 的 null 与缺省等效。移动到收件箱时，若未指定 in_backlog，会自动离开待规划区。 */
@@ -219,6 +255,20 @@ export interface components {
             message: string;
             request_id: string;
         };
+        CompletionPage: {
+            has_more: boolean;
+            items: components["schemas"]["CompletionResponse"][];
+            /** Format: int64 */
+            page: number;
+        };
+        CompletionResponse: {
+            business_date: string;
+            completed_at: string;
+            id: string;
+            project_name?: string | null;
+            task_id: string;
+            task_title: string;
+        };
         CreateProject: {
             name: string;
         };
@@ -233,6 +283,21 @@ export interface components {
             status?: components["schemas"]["TaskStatus"] | null;
             tags?: string[] | null;
             title: string;
+        };
+        DayPage: {
+            has_more: boolean;
+            items: components["schemas"]["DaySummary"][];
+            /** Format: int64 */
+            page: number;
+        };
+        DaySummary: {
+            business_date: string;
+            /** Format: int64 */
+            completed_count: number;
+        };
+        DeleteTask: {
+            /** Format: int64 */
+            expected_version: number;
         };
         /** @enum {string} */
         ErrorCode: "database_unavailable" | "unauthorized" | "invalid_credentials" | "invalid_request" | "forbidden" | "rate_limited" | "auth_unavailable" | "not_found" | "version_conflict";
@@ -678,6 +743,79 @@ export interface operations {
             };
         };
     };
+    delete_project: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-csrf-token": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionRequest"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     rename: {
         parameters: {
             query?: never;
@@ -978,6 +1116,97 @@ export interface operations {
             };
         };
     };
+    list_task_completions: {
+        parameters: {
+            query?: {
+                date?: string;
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompletionPage"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    list_task_completion_days: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayPage"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     list_tasks: {
         parameters: {
             query: {
@@ -1142,6 +1371,79 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    delete_task: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-csrf-token": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteTask"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

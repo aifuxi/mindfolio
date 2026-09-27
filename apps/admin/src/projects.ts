@@ -78,3 +78,17 @@ export async function changeProject(
         : await client.POST("/projects/{id}/restore", { params, body });
   return result(outcome.response, outcome.data, outcome.error);
 }
+
+export async function deleteProject(project: Project) {
+  const { response, error } = await client.DELETE("/projects/{id}", {
+    params: { path: { id: project.id }, header: { "x-csrf-token": csrf() } },
+    body: { expected_version: project.version },
+  });
+  if (!response.ok) {
+    if (response.status === 401) currentSession.value = null;
+    throw new ProjectRequestError(
+      error?.message ?? "删除项目失败",
+      response.status,
+    );
+  }
+}

@@ -109,3 +109,17 @@ export async function updateTask(
   });
   return result(response, data, error);
 }
+
+export async function deleteTask(task: Task) {
+  const { response, error } = await client.DELETE("/tasks/{id}", {
+    params: { path: { id: task.id }, header: { "x-csrf-token": csrf() } },
+    body: { expected_version: task.version },
+  });
+  if (!response.ok) {
+    if (response.status === 401) currentSession.value = null;
+    throw new TaskRequestError(
+      error?.message ?? "删除任务失败",
+      response.status,
+    );
+  }
+}

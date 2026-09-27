@@ -18,7 +18,7 @@ type TaskFailure = (StatusCode, Json<ApiError>);
 pub(super) fn routes() -> Router<PrivateState> {
     Router::new()
         .route("/tasks", get(list).post(create))
-        .route("/tasks/{id}", get(detail).patch(update))
+        .route("/tasks/{id}", get(detail).patch(update).delete(delete))
         .route("/tasks/{id}/subtasks", get(list_subtasks))
 }
 
@@ -203,6 +203,11 @@ pub(super) struct UpdateTask {
     tags: Option<Vec<String>>,
 }
 
+#[derive(Deserialize, ToSchema)]
+pub(super) struct DeleteTask {
+    expected_version: i64,
+}
+
 fn failure(status: StatusCode, code: ErrorCode, message: &str) -> TaskFailure {
     (
         status,
@@ -228,6 +233,21 @@ fn unavailable() -> TaskFailure {
         ErrorCode::DatabaseUnavailable,
         "数据库不可用",
     )
+}
+
+fn delete_lock_error(error: sqlx::Error) -> TaskFailure {
+    if error
+        .as_database_error()
+        .is_some_and(|error| matches!(error.code().as_deref(), Some("55P03" | "40P01")))
+    {
+        failure(
+            StatusCode::CONFLICT,
+            ErrorCode::VersionConflict,
+            "任务正在变更，请刷新后重试",
+        )
+    } else {
+        unavailable()
+    }
 }
 
 fn parse_id(raw: &str) -> Result<i64, TaskFailure> {
@@ -795,4 +815,56 @@ pub(super) async fn update(
         .map_err(|_| unavailable())?;
     tx.commit().await.map_err(|_| unavailable())?;
     Ok(Json(saved.into()))
+}
+
+#[utoipa::path(
+    delete, path = "/tasks/{id}", operation_id = "delete_task", security(("admin_session" = [])),
+    description = "删除任务时一并删除其一级子任务；既有完成记录保留。",
+    params(("id" = String, Path), ("x-csrf-token" = String, Header)), request_body = DeleteTask,
+    responses((status = 204), (status = 400, body = ApiError), (status = 401, body = ApiError), (status = 403, body = ApiError), (status = 404, body = ApiError), (status = 409, body = ApiError), (status = 503, body = ApiError))
+)]
+pub(super) async fn delete(
+    State(state): State<PrivateState>,
+    Path(id): Path<String>,
+    input: Result<Json<DeleteTask>, JsonRejection>,
+) -> Result<StatusCode, TaskFailure> {
+    let id = parse_id(&id)?;
+    let Json(input) = input.map_err(|_| invalid("请求无效"))?;
+    if input.expected_version < 1 {
+        return Err(invalid("版本无效"));
+    }
+    let mut tx = state.pool.begin().await.map_err(|_| unavailable())?;
+    let version: Option<i64> =
+        sqlx::query_scalar("SELECT version FROM task WHERE id = $1 FOR UPDATE NOWAIT")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(delete_lock_error)?;
+    let version = version.ok_or_else(missing)?;
+    if version != input.expected_version {
+        return Err(failure(
+            StatusCode::CONFLICT,
+            ErrorCode::VersionConflict,
+            "任务已变更，请刷新后重试",
+        ));
+    }
+    let _: Vec<i64> = sqlx::query_scalar(
+        "SELECT id FROM task WHERE parent_id = $1 ORDER BY id FOR UPDATE NOWAIT",
+    )
+    .bind(id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(delete_lock_error)?;
+    sqlx::query("DELETE FROM task WHERE parent_id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(delete_lock_error)?;
+    sqlx::query("DELETE FROM task WHERE id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(delete_lock_error)?;
+    tx.commit().await.map_err(delete_lock_error)?;
+    Ok(StatusCode::NO_CONTENT)
 }
