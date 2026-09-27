@@ -213,6 +213,635 @@
         ]
       }
     },
+    "/habits": {
+      "get": {
+        "tags": [
+          "habits"
+        ],
+        "operationId": "list_habits",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "habits"
+        ],
+        "operationId": "create_habit",
+        "parameters": [
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HabitInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ]
+      }
+    },
+    "/habits/{id}": {
+      "get": {
+        "tags": [
+          "habits"
+        ],
+        "operationId": "get_habit",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "habits"
+        ],
+        "operationId": "delete_habit",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "habits"
+        ],
+        "operationId": "update_habit",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HabitUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ]
+      }
+    },
+    "/habits/{id}/pause": {
+      "post": {
+        "tags": [
+          "habits"
+        ],
+        "operationId": "pause_habit",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ]
+      }
+    },
+    "/habits/{id}/resume": {
+      "post": {
+        "tags": [
+          "habits"
+        ],
+        "operationId": "resume_habit",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ]
+      }
+    },
     "/health/live": {
       "get": {
         "tags": [],
@@ -2153,6 +2782,148 @@
           "version_conflict"
         ]
       },
+      "HabitDetail": {
+        "type": "object",
+        "required": [
+          "habit",
+          "settings",
+          "pauses"
+        ],
+        "properties": {
+          "habit": {
+            "$ref": "#/components/schemas/HabitResponse"
+          },
+          "pauses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PauseResponse"
+            }
+          },
+          "settings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SettingResponse"
+            }
+          }
+        }
+      },
+      "HabitInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "cadence"
+        ],
+        "properties": {
+          "cadence": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "weekly_target": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "HabitPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "has_more"
+        ],
+        "properties": {
+          "has_more": {
+            "type": "boolean"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HabitResponse"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "HabitResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "created_on",
+          "version",
+          "name",
+          "cadence",
+          "paused"
+        ],
+        "properties": {
+          "cadence": {
+            "type": "string"
+          },
+          "created_on": {
+            "type": "string"
+          },
+          "deleted_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "weekly_target": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "HabitUpdate": {
+        "type": "object",
+        "required": [
+          "name",
+          "cadence",
+          "expected_version"
+        ],
+        "properties": {
+          "cadence": {
+            "type": "string"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "weekly_target": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "HealthState": {
         "type": "string",
         "enum": [
@@ -2181,6 +2952,23 @@
             "type": "string"
           },
           "username": {
+            "type": "string"
+          }
+        }
+      },
+      "PauseResponse": {
+        "type": "object",
+        "required": [
+          "start_on"
+        ],
+        "properties": {
+          "end_on": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_on": {
             "type": "string"
           }
         }
@@ -2280,6 +3068,32 @@
           },
           "username": {
             "type": "string"
+          }
+        }
+      },
+      "SettingResponse": {
+        "type": "object",
+        "required": [
+          "effective_on",
+          "name",
+          "cadence"
+        ],
+        "properties": {
+          "cadence": {
+            "type": "string"
+          },
+          "effective_on": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "weekly_target": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
           }
         }
       },

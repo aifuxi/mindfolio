@@ -38,6 +38,12 @@ impl TodayClock {
     fn instant(&self) -> DateTime<Utc> {
         self.fixed_instant.unwrap_or_else(Utc::now)
     }
+
+    pub(crate) fn business_date(&self) -> NaiveDate {
+        self.instant()
+            .with_timezone(&sqlx::types::chrono::FixedOffset::east_opt(8 * 3600).unwrap())
+            .date_naive()
+    }
 }
 
 pub(crate) fn today_routes(clock: TodayClock) -> Router<PrivateState> {
