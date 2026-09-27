@@ -35,7 +35,7 @@ impl TodayClock {
         }
     }
 
-    fn instant(&self) -> DateTime<Utc> {
+    pub(crate) fn instant(&self) -> DateTime<Utc> {
         self.fixed_instant.unwrap_or_else(Utc::now)
     }
 

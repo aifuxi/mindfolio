@@ -386,8 +386,9 @@ async fn transition(
             }
         }
         "delete" => {
-            sqlx::query("UPDATE habit SET deleted_at = now() WHERE id = $1")
+            sqlx::query("UPDATE habit SET deleted_at = $2 WHERE id = $1")
                 .bind(id)
+                .bind(clock.instant())
                 .execute(&mut *tx)
                 .await
                 .map_err(|_| unavailable())?;

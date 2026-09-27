@@ -5,6 +5,7 @@ import { currentSession } from "./auth";
 export type Habit = components["schemas"]["HabitResponse"];
 export type HabitDetail = components["schemas"]["HabitDetail"];
 export type HabitInput = components["schemas"]["HabitInput"];
+export type HabitCalendar = components["schemas"]["CalendarResponse"];
 type ApiError = components["schemas"]["ApiError"];
 
 const client = createClient<paths>({ baseUrl: "/api" });
@@ -82,4 +83,35 @@ export async function changeHabit(
         ? await client.POST("/habits/{id}/resume", { params, body })
         : await client.DELETE("/habits/{id}", { params, body });
   return result(outcome.response, outcome.data, outcome.error);
+}
+
+export async function getHabitCalendar(id: string, month: string) {
+  const { data, error, response } = await client.GET("/habits/{id}/calendar", {
+    params: { path: { id }, query: { month } },
+  });
+  return result(response, data, error);
+}
+
+export async function listHabitCheckins(id: string, from: string, to: string) {
+  const { data, error, response } = await client.GET("/habits/{id}/checkins", {
+    params: { path: { id }, query: { from, to } },
+  });
+  return result(response, data, error);
+}
+
+export async function saveHabitCheckin(
+  id: string,
+  date: string,
+  completed: boolean,
+  note: string,
+  expectedVersion: number | null,
+) {
+  const { data, error, response } = await client.PUT(
+    "/habits/{id}/checkins/{date}",
+    {
+      params: { path: { id, date }, header: { "x-csrf-token": csrf() } },
+      body: { completed, note, expected_version: expectedVersion },
+    },
+  );
+  return result(response, data, error);
 }

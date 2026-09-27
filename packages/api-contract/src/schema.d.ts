@@ -81,6 +81,54 @@ export interface paths {
         patch: operations["update_habit"];
         trace?: never;
     };
+    "/habits/{id}/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_habit_calendar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/habits/{id}/checkins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_habit_checkins"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/habits/{id}/checkins/{date}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["save_habit_checkin"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/habits/{id}/pause": {
         parameters: {
             query?: never;
@@ -353,6 +401,36 @@ export interface components {
             message: string;
             request_id: string;
         };
+        CalendarDay: {
+            cadence?: string | null;
+            /** Format: int64 */
+            checkin_version?: number | null;
+            date: string;
+            name?: string | null;
+            note?: string | null;
+            state: components["schemas"]["DayState"];
+            /** Format: int32 */
+            weekly_target?: number | null;
+        };
+        CalendarResponse: {
+            days: components["schemas"]["CalendarDay"][];
+            month: string;
+            month_rate: components["schemas"]["Rate"];
+            today: string;
+            weeks: components["schemas"]["WeekRate"][];
+        };
+        CheckinList: {
+            items: components["schemas"]["CheckinResponse"][];
+        };
+        CheckinResponse: {
+            business_date: string;
+            completed: boolean;
+            habit_id: string;
+            id: string;
+            note: string;
+            /** Format: int64 */
+            version: number;
+        };
         CompletionPage: {
             has_more: boolean;
             items: components["schemas"]["CompletionResponse"][];
@@ -388,6 +466,8 @@ export interface components {
             /** Format: int64 */
             page: number;
         };
+        /** @enum {string} */
+        DayState: "before_creation" | "deleted" | "future" | "paused" | "completed" | "incomplete" | "missed";
         DaySummary: {
             business_date: string;
             /** Format: int64 */
@@ -467,10 +547,24 @@ export interface components {
             /** Format: int64 */
             version: number;
         };
+        Rate: {
+            /** Format: double */
+            earned: number;
+            /** Format: double */
+            percent?: number | null;
+            /** Format: double */
+            possible: number;
+        };
         RenameProject: {
             /** Format: int64 */
             expected_version: number;
             name: string;
+        };
+        SaveCheckin: {
+            completed: boolean;
+            /** Format: int64 */
+            expected_version?: number | null;
+            note: string;
         };
         SessionResponse: {
             csrf_token: string;
@@ -538,6 +632,11 @@ export interface components {
         VersionRequest: {
             /** Format: int64 */
             expected_version: number;
+        };
+        WeekRate: {
+            ends_on: string;
+            rate: components["schemas"]["Rate"];
+            starts_on: string;
         };
     };
     responses: never;
@@ -953,6 +1052,193 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HabitResponse"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    get_habit_calendar: {
+        parameters: {
+            query: {
+                month: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarResponse"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    list_habit_checkins: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckinList"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    save_habit_checkin: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-csrf-token": string;
+            };
+            path: {
+                id: string;
+                date: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveCheckin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckinResponse"];
                 };
             };
             400: {
