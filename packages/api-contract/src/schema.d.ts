@@ -190,8 +190,24 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** @description 缺省字段保持原值；project_id、description、priority、planned_date、due_date 的 null 清空；title、status、in_backlog 的 null 与缺省等效。移动到收件箱时，若未指定 in_backlog，会自动离开待规划区。 */
+        /** @description 缺省字段保持原值；parent_id、project_id、description、priority、planned_date、due_date 的 null 清空；title、status、in_backlog 的 null 与缺省等效。移动到收件箱时，若未指定 in_backlog，会自动离开待规划区。 */
         patch: operations["update_task"];
+        trace?: never;
+    };
+    "/tasks/{id}/subtasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_subtasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
 }
@@ -210,6 +226,7 @@ export interface components {
             description?: string | null;
             due_date?: string | null;
             in_backlog?: boolean | null;
+            parent_id?: string | null;
             planned_date?: string | null;
             priority?: components["schemas"]["TaskPriority"] | null;
             project_id?: string | null;
@@ -263,6 +280,7 @@ export interface components {
             due_date?: string | null;
             id: string;
             in_backlog: boolean;
+            parent_id?: string | null;
             planned_date?: string | null;
             priority?: components["schemas"]["TaskPriority"] | null;
             project_id?: string | null;
@@ -279,6 +297,7 @@ export interface components {
             /** Format: int64 */
             expected_version: number;
             in_backlog?: boolean | null;
+            parent_id?: string | null;
             planned_date?: string | null;
             priority?: components["schemas"]["TaskPriority"] | null;
             project_id?: string | null;
@@ -1188,6 +1207,61 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    list_subtasks: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskPage"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

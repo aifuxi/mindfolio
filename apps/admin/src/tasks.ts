@@ -59,6 +59,20 @@ export async function getTask(id: string) {
   return result(response, data, error);
 }
 
+export async function listSubtasks(parentId: string) {
+  const items: Task[] = [];
+  let page = 1;
+  while (true) {
+    const { data, error, response } = await client.GET("/tasks/{id}/subtasks", {
+      params: { path: { id: parentId }, query: { page } },
+    });
+    const resultPage = result(response, data, error);
+    items.push(...resultPage.items);
+    if (!resultPage.has_more) return items;
+    page++;
+  }
+}
+
 export async function createTask(body: CreateTask) {
   const { data, error, response } = await client.POST("/tasks", {
     params: { header: { "x-csrf-token": csrf() } },

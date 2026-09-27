@@ -8,6 +8,7 @@ import {
   TaskRequestError,
   createTask,
   getTask,
+  listSubtasks,
   listTasks,
   updateTask,
   type Task,
@@ -25,6 +26,14 @@ const busy = ref(false);
 const error = ref("");
 const notice = ref("");
 const editingTask = ref<Task | null>(null);
+const subtasks = ref<Task[]>([]);
+const pendingCompletion = ref(false);
+const childForm = reactive({
+  title: "",
+  status: "todo" as TaskStatus,
+  planned_date: "",
+  due_date: "",
+});
 const selectedProjectId = computed(() =>
   typeof route.query.project_id === "string" ? route.query.project_id : "",
 );
@@ -126,6 +135,8 @@ watch(
   () => {
     page.value = 1;
     editingTask.value = null;
+    subtasks.value = [];
+    pendingCompletion.value = false;
     createForm.project_id = selectedProjectId.value;
     createForm.in_backlog = false;
     void loadTasks();
@@ -184,8 +195,10 @@ async function submitCreate() {
   }
 }
 
-function beginEdit(task: Task) {
+async function beginEdit(task: Task) {
   editingTask.value = task;
+  subtasks.value = [];
+  pendingCompletion.value = false;
   editForm.title = task.title;
   editForm.description = task.description;
   editForm.project_id = task.project_id ?? "";
@@ -195,6 +208,49 @@ function beginEdit(task: Task) {
   editForm.due_date = task.due_date ?? "";
   editForm.in_backlog = task.in_backlog;
   error.value = "";
+  if (!task.parent_id) {
+    try {
+      subtasks.value = await listSubtasks(task.id);
+    } catch (cause) {
+      handleError(cause);
+    }
+  }
+}
+
+async function returnToParent() {
+  if (!editingTask.value?.parent_id) return;
+  try {
+    await beginEdit(await getTask(editingTask.value.parent_id));
+  } catch (cause) {
+    handleError(cause);
+  }
+}
+
+async function submitChild() {
+  const parent = editingTask.value;
+  if (busy.value || !parent || parent.parent_id) return;
+  busy.value = true;
+  error.value = "";
+  try {
+    await createTask({
+      parent_id: parent.id,
+      project_id: parent.project_id,
+      title: childForm.title,
+      status: childForm.status,
+      planned_date: childForm.planned_date || null,
+      due_date: childForm.due_date || null,
+    });
+    childForm.title = "";
+    childForm.status = "todo";
+    childForm.planned_date = "";
+    childForm.due_date = "";
+    subtasks.value = await listSubtasks(parent.id);
+    notice.value = "子任务已创建";
+  } catch (cause) {
+    handleError(cause);
+  } finally {
+    busy.value = false;
+  }
 }
 
 function clearBacklog(form: typeof createForm) {
@@ -205,6 +261,10 @@ async function refreshEditingTask() {
   if (!editingTask.value) return;
   try {
     editingTask.value = await getTask(editingTask.value.id);
+    if (!editingTask.value.parent_id) {
+      subtasks.value = await listSubtasks(editingTask.value.id);
+    }
+    pendingCompletion.value = false;
     await loadTasks();
     notice.value = "已取得最新版本，编辑内容仍保留";
   } catch (cause) {
@@ -212,12 +272,24 @@ async function refreshEditingTask() {
   }
 }
 
-async function saveEdit() {
+async function saveEdit(confirmed = false) {
   if (busy.value || !editingTask.value) return;
   busy.value = true;
   error.value = "";
   notice.value = "";
   try {
+    if (
+      !confirmed &&
+      !editingTask.value.parent_id &&
+      editingTask.value.status !== "completed" &&
+      editForm.status === "completed"
+    ) {
+      subtasks.value = await listSubtasks(editingTask.value.id);
+      if (subtasks.value.some((task) => task.status !== "completed")) {
+        pendingCompletion.value = true;
+        return;
+      }
+    }
     await updateTask(editingTask.value, {
       title: editForm.title,
       description: editForm.description,
@@ -229,6 +301,8 @@ async function saveEdit() {
       in_backlog: editForm.in_backlog,
     });
     editingTask.value = null;
+    subtasks.value = [];
+    pendingCompletion.value = false;
     await loadTasks();
     notice.value = "任务已保存";
   } catch (cause) {
@@ -432,10 +506,18 @@ async function saveEdit() {
         aria-labelledby="edit-title"
       >
         <div class="edit-heading">
-          <h2 id="edit-title">编辑任务</h2>
+          <h2 id="edit-title">
+            {{ editingTask.parent_id ? "编辑子任务" : "编辑任务" }}
+          </h2>
           <Button theme="borderless" @click="editingTask = null">关闭</Button>
         </div>
-        <form class="form" @submit.prevent="saveEdit">
+        <Button
+          v-if="editingTask.parent_id"
+          theme="borderless"
+          @click="returnToParent"
+          >返回父任务</Button
+        >
+        <form class="form" @submit.prevent="saveEdit()">
           <label for="edit-title-input">标题</label
           ><input
             id="edit-title-input"
@@ -514,6 +596,26 @@ async function saveEdit() {
               :disabled="!editForm.project_id"
             />放入待规划区</label
           >
+          <div
+            v-if="pendingCompletion && editForm.status === 'completed'"
+            class="completion-prompt"
+            role="alertdialog"
+            aria-label="确认完成父任务"
+          >
+            <p>
+              仍有
+              {{
+                subtasks.filter((task) => task.status !== "completed").length
+              }}
+              个未完成子任务。完成父任务不会改变这些子任务的状态。
+            </p>
+            <Button theme="outline" @click="pendingCompletion = false"
+              >暂不完成</Button
+            >
+            <Button theme="solid" type="primary" @click="saveEdit(true)"
+              >仍要完成父任务</Button
+            >
+          </div>
           <div>
             <Button
               html-type="submit"
@@ -524,6 +626,76 @@ async function saveEdit() {
             >
           </div>
         </form>
+        <section
+          v-if="!editingTask.parent_id"
+          class="subtasks"
+          aria-label="子任务"
+        >
+          <h3>子任务</h3>
+          <p v-if="subtasks.length === 0" class="subtle">还没有子任务。</p>
+          <ul v-else class="task-list">
+            <li v-for="child in subtasks" :key="child.id" class="task-card">
+              <div class="task-main">
+                <h3>{{ child.title }}</h3>
+                <div class="meta">
+                  <span>{{ statusLabel(child.status) }}</span>
+                  <span v-if="child.planned_date"
+                    >计划 {{ child.planned_date }}</span
+                  >
+                  <span v-if="child.due_date">截止 {{ child.due_date }}</span>
+                </div>
+              </div>
+              <Button theme="borderless" @click="beginEdit(child)"
+                >编辑子任务</Button
+              >
+            </li>
+          </ul>
+          <form class="form child-form" @submit.prevent="submitChild">
+            <h3>新建子任务</h3>
+            <label for="child-title">子任务标题</label>
+            <input
+              id="child-title"
+              v-model="childForm.title"
+              required
+              maxlength="200"
+            />
+            <div class="fields">
+              <div>
+                <label for="child-status">子任务状态</label>
+                <select id="child-status" v-model="childForm.status">
+                  <option
+                    v-for="item in statusOptions"
+                    :key="item.value"
+                    :value="item.value"
+                  >
+                    {{ item.label }}
+                  </option>
+                </select>
+              </div>
+              <div>
+                <label for="child-planned">子任务计划日期</label>
+                <input
+                  id="child-planned"
+                  v-model="childForm.planned_date"
+                  type="date"
+                />
+              </div>
+              <div>
+                <label for="child-due">子任务截止日期</label>
+                <input
+                  id="child-due"
+                  v-model="childForm.due_date"
+                  type="date"
+                />
+              </div>
+            </div>
+            <div>
+              <Button html-type="submit" theme="outline" :loading="busy"
+                >创建子任务</Button
+              >
+            </div>
+          </form>
+        </section>
       </section>
     </div>
   </main>
@@ -716,6 +888,23 @@ select:focus-visible {
 }
 .edit {
   max-width: 48rem;
+}
+.subtasks {
+  border-top: 1px solid #e0e5ec;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  display: grid;
+  gap: 1rem;
+}
+.child-form {
+  border-top: 1px solid #e0e5ec;
+  padding-top: 1.5rem;
+}
+.completion-prompt {
+  background: #fff4db;
+  border: 1px solid #d9ad52;
+  border-radius: 0.5rem;
+  padding: 1rem;
 }
 @media (max-width: 760px) {
   .page {

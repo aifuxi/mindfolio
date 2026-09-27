@@ -44,7 +44,7 @@ enum ErrorCode {
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(live, ready, auth::login, auth::session, auth::logout, projects::list, projects::create, projects::detail, projects::rename, projects::complete, projects::archive, projects::restore, tasks::list, tasks::create, tasks::detail, tasks::update),
+    paths(live, ready, auth::login, auth::session, auth::logout, projects::list, projects::create, projects::detail, projects::rename, projects::complete, projects::archive, projects::restore, tasks::list, tasks::list_subtasks, tasks::create, tasks::detail, tasks::update),
     components(schemas(HealthStatus, HealthState, ApiError, ErrorCode, auth::LoginRequest, auth::SessionResponse, projects::ProjectResponse, projects::ProjectPage, projects::CreateProject, projects::RenameProject, projects::VersionRequest, tasks::TaskStatus, tasks::TaskPriority, tasks::TaskResponse, tasks::TaskPage, tasks::CreateTask, tasks::UpdateTask)),
     servers((url = "/api"))
 )]

@@ -19,6 +19,7 @@ pub(super) fn routes() -> Router<PrivateState> {
     Router::new()
         .route("/tasks", get(list).post(create))
         .route("/tasks/{id}", get(detail).patch(update))
+        .route("/tasks/{id}/subtasks", get(list_subtasks))
 }
 
 #[derive(Clone, Copy, Deserialize, Serialize, ToSchema, PartialEq, Eq)]
@@ -84,6 +85,7 @@ impl TaskPriority {
 #[derive(Clone, PartialEq, FromRow)]
 struct TaskRow {
     id: i64,
+    parent_id: Option<i64>,
     project_id: Option<i64>,
     title: String,
     description: String,
@@ -98,6 +100,7 @@ struct TaskRow {
 #[derive(Serialize, ToSchema)]
 pub(super) struct TaskResponse {
     id: String,
+    parent_id: Option<String>,
     project_id: Option<String>,
     title: String,
     description: String,
@@ -113,6 +116,7 @@ impl From<TaskRow> for TaskResponse {
     fn from(row: TaskRow) -> Self {
         Self {
             id: row.id.to_string(),
+            parent_id: row.parent_id.map(|id| id.to_string()),
             project_id: row.project_id.map(|id| id.to_string()),
             title: row.title,
             description: row.description,
@@ -143,6 +147,7 @@ pub(super) struct ListQuery {
 #[derive(Deserialize, ToSchema)]
 pub(super) struct CreateTask {
     title: String,
+    parent_id: Option<String>,
     project_id: Option<String>,
     description: Option<String>,
     status: Option<TaskStatus>,
@@ -164,6 +169,8 @@ where
 pub(super) struct UpdateTask {
     expected_version: i64,
     title: Option<String>,
+    #[serde(default, deserialize_with = "present_nullable")]
+    parent_id: Option<Option<String>>,
     #[serde(default, deserialize_with = "present_nullable")]
     project_id: Option<Option<String>>,
     #[serde(default, deserialize_with = "present_nullable")]
@@ -217,6 +224,54 @@ fn parse_project_id(raw: &str) -> Result<i64, TaskFailure> {
         .ok()
         .filter(|id| *id > 0)
         .ok_or_else(|| invalid("项目 ID 无效"))
+}
+
+fn parse_parent_id(raw: &str) -> Result<i64, TaskFailure> {
+    raw.parse::<i64>()
+        .ok()
+        .filter(|id| *id > 0)
+        .ok_or_else(|| invalid("父任务 ID 无效"))
+}
+
+async fn parent_task(tx: &mut Transaction<'_, Postgres>, id: i64) -> Result<TaskRow, TaskFailure> {
+    let statement = format!("SELECT {FIELDS} FROM task WHERE id = $1 FOR UPDATE");
+    sqlx::query_as(&statement)
+        .bind(id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(|_| unavailable())?
+        .ok_or_else(missing)
+}
+
+async fn validate_hierarchy(
+    tx: &mut Transaction<'_, Postgres>,
+    row: &TaskRow,
+) -> Result<(), TaskFailure> {
+    if let Some(parent_id) = row.parent_id {
+        if parent_id == row.id {
+            return Err(invalid("任务不能成为自己的子任务"));
+        }
+        let parent = parent_task(tx, parent_id).await?;
+        if parent.parent_id.is_some() {
+            return Err(invalid("子任务不能再拆分"));
+        }
+        if parent.project_id != row.project_id {
+            return Err(invalid("子任务与父任务的项目必须一致"));
+        }
+    }
+    let incompatible_child: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM task WHERE parent_id = $1 AND ($2::BIGINT IS NOT NULL OR project_id IS DISTINCT FROM $3::BIGINT))",
+    )
+    .bind(row.id)
+    .bind(row.parent_id)
+    .bind(row.project_id)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(|_| unavailable())?;
+    if incompatible_child {
+        return Err(invalid("父任务的层级或项目与子任务不一致"));
+    }
+    Ok(())
 }
 
 fn title(raw: &str) -> Result<String, TaskFailure> {
@@ -292,7 +347,7 @@ async fn record_completion(
     Ok(())
 }
 
-const FIELDS: &str = "id, project_id, title, description, status, priority, planned_date, due_date, in_backlog, version";
+const FIELDS: &str = "id, parent_id, project_id, title, description, status, priority, planned_date, due_date, in_backlog, version";
 
 #[utoipa::path(
     get, path = "/tasks", operation_id = "list_tasks", security(("admin_session" = [])),
@@ -328,7 +383,7 @@ pub(super) async fn list(
         }
     }
     let statement = format!(
-        "SELECT {FIELDS} FROM task WHERE project_id IS NOT DISTINCT FROM $1::BIGINT ORDER BY created_at DESC, id DESC LIMIT 51 OFFSET $2"
+        "SELECT {FIELDS} FROM task WHERE parent_id IS NULL AND project_id IS NOT DISTINCT FROM $1::BIGINT ORDER BY created_at DESC, id DESC LIMIT 51 OFFSET $2"
     );
     let mut rows: Vec<TaskRow> = sqlx::query_as(&statement)
         .bind(project_id)
@@ -343,6 +398,53 @@ pub(super) async fn list(
         page,
         has_more,
     }))
+}
+
+#[utoipa::path(
+    get, path = "/tasks/{id}/subtasks", operation_id = "list_subtasks", security(("admin_session" = [])),
+    params(("id" = String, Path), ("page" = Option<i64>, Query)),
+    responses((status = 200, body = TaskPage), (status = 400, body = ApiError), (status = 401, body = ApiError), (status = 404, body = ApiError), (status = 503, body = ApiError))
+)]
+pub(super) async fn list_subtasks(
+    State(state): State<PrivateState>,
+    Path(id): Path<String>,
+    query: Result<Query<SubtaskQuery>, QueryRejection>,
+) -> Result<Json<TaskPage>, TaskFailure> {
+    let id = parse_id(&id)?;
+    let Query(query) = query.map_err(|_| invalid("查询参数无效"))?;
+    let page = query.page.unwrap_or(1);
+    if !(1..=100_000).contains(&page) {
+        return Err(invalid("页码无效"));
+    }
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM task WHERE id = $1)")
+        .bind(id)
+        .fetch_one(&state.pool)
+        .await
+        .map_err(|_| unavailable())?;
+    if !exists {
+        return Err(missing());
+    }
+    let statement = format!(
+        "SELECT {FIELDS} FROM task WHERE parent_id = $1 ORDER BY created_at DESC, id DESC LIMIT 51 OFFSET $2"
+    );
+    let mut rows: Vec<TaskRow> = sqlx::query_as(&statement)
+        .bind(id)
+        .bind((page - 1) * 50)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|_| unavailable())?;
+    let has_more = rows.len() > 50;
+    rows.truncate(50);
+    Ok(Json(TaskPage {
+        items: rows.into_iter().map(Into::into).collect(),
+        page,
+        has_more,
+    }))
+}
+
+#[derive(Deserialize)]
+pub(super) struct SubtaskQuery {
+    page: Option<i64>,
 }
 
 #[utoipa::path(
@@ -362,6 +464,11 @@ pub(super) async fn create(
         .as_deref()
         .map(parse_project_id)
         .transpose()?;
+    let parent_id = input
+        .parent_id
+        .as_deref()
+        .map(parse_parent_id)
+        .transpose()?;
     let in_backlog = input.in_backlog.unwrap_or(false);
     if in_backlog && project_id.is_none() {
         return Err(invalid("收件箱任务不能进入待规划区"));
@@ -370,13 +477,23 @@ pub(super) async fn create(
     let due_date = date(input.due_date)?;
     let status = input.status.unwrap_or(TaskStatus::Todo);
     let mut tx = state.pool.begin().await.map_err(|_| unavailable())?;
+    if let Some(id) = parent_id {
+        let parent = parent_task(&mut tx, id).await?;
+        if parent.parent_id.is_some() {
+            return Err(invalid("子任务不能再拆分"));
+        }
+        if parent.project_id != project_id {
+            return Err(invalid("子任务与父任务的项目必须一致"));
+        }
+    }
     if let Some(id) = project_id {
         project_name(&mut tx, id, true).await?;
     }
     let statement = format!(
-        "INSERT INTO task (project_id, title, description, status, priority, planned_date, due_date, in_backlog) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING {FIELDS}"
+        "INSERT INTO task (parent_id, project_id, title, description, status, priority, planned_date, due_date, in_backlog) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING {FIELDS}"
     );
     let row: TaskRow = sqlx::query_as(&statement)
+        .bind(parent_id)
         .bind(project_id)
         .bind(title)
         .bind(description)
@@ -415,7 +532,7 @@ pub(super) async fn detail(
 
 #[utoipa::path(
     patch, path = "/tasks/{id}", operation_id = "update_task", security(("admin_session" = [])),
-    description = "缺省字段保持原值；project_id、description、priority、planned_date、due_date 的 null 清空；title、status、in_backlog 的 null 与缺省等效。移动到收件箱时，若未指定 in_backlog，会自动离开待规划区。",
+    description = "缺省字段保持原值；parent_id、project_id、description、priority、planned_date、due_date 的 null 清空；title、status、in_backlog 的 null 与缺省等效。移动到收件箱时，若未指定 in_backlog，会自动离开待规划区。",
     params(("id" = String, Path), ("x-csrf-token" = String, Header)), request_body = UpdateTask,
     responses((status = 200, body = TaskResponse), (status = 400, body = ApiError), (status = 401, body = ApiError), (status = 403, body = ApiError), (status = 404, body = ApiError), (status = 409, body = ApiError), (status = 503, body = ApiError))
 )]
@@ -448,6 +565,9 @@ pub(super) async fn update(
     if let Some(value) = input.title {
         row.title = title(&value)?;
     }
+    if let Some(value) = input.parent_id {
+        row.parent_id = value.as_deref().map(parse_parent_id).transpose()?;
+    }
     if let Some(value) = input.description {
         row.description = description(value.unwrap_or_default())?;
     }
@@ -477,14 +597,18 @@ pub(super) async fn update(
     if row.project_id.is_none() && row.in_backlog {
         return Err(invalid("收件箱任务不能进入待规划区"));
     }
+    if row.parent_id != previous.parent_id || row.project_id != previous.project_id {
+        validate_hierarchy(&mut tx, &row).await?;
+    }
     if row == previous {
         return Ok(Json(row.into()));
     }
     let newly_completed = previous.status != "completed" && row.status == "completed";
     let statement = format!(
-        "UPDATE task SET project_id = $1, title = $2, description = $3, status = $4, priority = $5, planned_date = $6, due_date = $7, in_backlog = $8, version = version + 1, updated_at = now() WHERE id = $9 AND version = $10 RETURNING {FIELDS}"
+        "UPDATE task SET parent_id = $1, project_id = $2, title = $3, description = $4, status = $5, priority = $6, planned_date = $7, due_date = $8, in_backlog = $9, version = version + 1, updated_at = now() WHERE id = $10 AND version = $11 RETURNING {FIELDS}"
     );
     let saved: TaskRow = sqlx::query_as(&statement)
+        .bind(row.parent_id)
         .bind(row.project_id)
         .bind(&row.title)
         .bind(&row.description)

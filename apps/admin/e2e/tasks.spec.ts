@@ -148,3 +148,134 @@ test("收件箱任务归入项目、完成及冲突后保留编辑", async ({ pa
   await expect(page.getByRole("alert")).toContainText("任务已变更");
   await expect(page.locator("#edit-title-input")).toHaveValue("保留的编辑内容");
 });
+
+test("创建和维护一级子任务时提示未完成步骤", async ({ page }) => {
+  let active = false;
+  const parent = {
+    id: "9007199254740993",
+    parent_id: null,
+    project_id: null,
+    title: "整理资料",
+    description: "",
+    status: "todo",
+    priority: null,
+    planned_date: null,
+    due_date: null,
+    in_backlog: false,
+    version: 1,
+  };
+  let child: typeof parent | null = null;
+  await page.route("**/api/auth/**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/auth/login")
+      active = true;
+    await route.fulfill({
+      status: active ? 200 : 401,
+      contentType: "application/json",
+      body: JSON.stringify(
+        active
+          ? { username: "owner", csrf_token: "csrf-test" }
+          : { code: "unauthorized", message: "请先登录", request_id: "test" },
+      ),
+    });
+  });
+  await page.route(/\/api\/projects(?:\/|\?|$)/, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ items: [], page: 1, has_more: false }),
+    }),
+  );
+  await page.route(/\/api\/tasks(?:\/|\?|$)/, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path.endsWith("/subtasks")) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: child ? [child] : [],
+          page: 1,
+          has_more: false,
+        }),
+      });
+      return;
+    }
+    if (request.method() === "POST") {
+      const input = request.postDataJSON();
+      expect(input.parent_id).toBe(parent.id);
+      child = {
+        ...parent,
+        ...input,
+        id: "9007199254740994",
+        parent_id: parent.id,
+        planned_date: input.planned_date ?? null,
+        due_date: input.due_date ?? null,
+      };
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify(child),
+      });
+      return;
+    }
+    if (request.method() === "PATCH") {
+      const input = request.postDataJSON();
+      const target = path.endsWith(child?.id ?? "missing") ? child! : parent;
+      Object.assign(target, input, { version: target.version + 1 });
+      delete (target as Record<string, unknown>).expected_version;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(target),
+      });
+      return;
+    }
+    if (path.endsWith(parent.id)) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(parent),
+      });
+      return;
+    }
+    if (child && path.endsWith(child.id)) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(child),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ items: [parent], page: 1, has_more: false }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByLabel("账号").fill("owner");
+  await page.getByLabel("密码").fill("correct horse battery staple");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await page.getByRole("link", { name: "打开收件箱与任务" }).click();
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await page.getByLabel("子任务标题").fill("收集文档");
+  await page.getByLabel("子任务计划日期").fill("2026-09-29");
+  await page.getByRole("button", { name: "创建子任务" }).click();
+  await expect(page.getByRole("heading", { name: "收集文档" })).toBeVisible();
+  await page.getByRole("button", { name: "编辑子任务" }).click();
+  await page.locator("#edit-status").selectOption("in_progress");
+  await page.locator("#edit-due").fill("2026-09-30");
+  await page.getByRole("button", { name: "保存任务" }).click();
+  expect(child?.status).toBe("in_progress");
+  expect(child?.due_date).toBe("2026-09-30");
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await page.locator("#edit-status").selectOption("completed");
+  await page.getByRole("button", { name: "保存任务" }).click();
+  await expect(
+    page.getByRole("alertdialog", { name: "确认完成父任务" }),
+  ).toContainText("1 个未完成子任务");
+  expect(parent.status).toBe("todo");
+  await page.getByRole("button", { name: "暂不完成" }).click();
+  expect(parent.status).toBe("todo");
+  await page.getByRole("button", { name: "保存任务" }).click();
+  await page.getByRole("button", { name: "仍要完成父任务" }).click();
+  await expect(
+    page.getByRole("listitem").getByText("已完成", { exact: true }),
+  ).toBeVisible();
+  expect(child?.status).toBe("in_progress");
+});

@@ -584,3 +584,389 @@ async fn 任务数据库约束保护收件箱和状态(pool: PgPool) {
         .unwrap();
     tx.rollback().await.unwrap();
 }
+
+#[sqlx::test]
+async fn 一级子任务限制层级归属和移动且保持原子性(pool: PgPool) {
+    let (app, cookie, csrf) = session(&pool).await;
+    let project = write(
+        &app,
+        "POST",
+        "/projects",
+        &cookie,
+        &csrf,
+        json!({"name":"项目甲"}),
+    )
+    .await;
+    let project_id = json_body(project).await["id"].as_str().unwrap().to_string();
+    let another = write(
+        &app,
+        "POST",
+        "/projects",
+        &cookie,
+        &csrf,
+        json!({"name":"项目乙"}),
+    )
+    .await;
+    let another_id = json_body(another).await["id"].as_str().unwrap().to_string();
+    let parent = write(
+        &app,
+        "POST",
+        "/tasks",
+        &cookie,
+        &csrf,
+        json!({"title":"父任务", "project_id":project_id}),
+    )
+    .await;
+    assert_eq!(parent.status(), StatusCode::CREATED);
+    let parent_id = json_body(parent).await["id"].as_str().unwrap().to_string();
+
+    let forbidden = send(
+        &app,
+        "GET",
+        &format!("/tasks/{parent_id}/subtasks"),
+        None,
+        None,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(forbidden.status(), StatusCode::UNAUTHORIZED);
+    let wrong_csrf = send(
+        &app,
+        "POST",
+        "/tasks",
+        Some(ORIGIN),
+        Some(&cookie),
+        Some("wrong"),
+        Some(json!({"title":"拒绝创建", "parent_id":parent_id, "project_id":project_id})),
+    )
+    .await;
+    assert_eq!(wrong_csrf.status(), StatusCode::FORBIDDEN);
+    let wrong_origin = send(
+        &app,
+        "POST",
+        "/tasks",
+        Some("https://other.example"),
+        Some(&cookie),
+        Some(&csrf),
+        Some(json!({"title":"拒绝创建", "parent_id":parent_id, "project_id":project_id})),
+    )
+    .await;
+    assert_eq!(wrong_origin.status(), StatusCode::FORBIDDEN);
+
+    let child = write(
+        &app, "POST", "/tasks", &cookie, &csrf,
+        json!({"title":"步骤一", "parent_id":parent_id, "project_id":project_id, "planned_date":"2026-09-28", "due_date":"2026-09-30"}),
+    ).await;
+    assert_eq!(child.status(), StatusCode::CREATED);
+    let child = json_body(child).await;
+    let child_id = child["id"].as_str().unwrap().to_string();
+    assert_eq!(child["parent_id"], parent_id);
+    assert_eq!(child["planned_date"], "2026-09-28");
+    assert_eq!(child["due_date"], "2026-09-30");
+    let top_level = send(
+        &app,
+        "GET",
+        &format!("/tasks?scope=project&project_id={project_id}"),
+        None,
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(
+        json_body(top_level).await["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let children = send(
+        &app,
+        "GET",
+        &format!("/tasks/{parent_id}/subtasks"),
+        None,
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(json_body(children).await["items"][0]["id"], child_id);
+
+    let grandchild = write(
+        &app,
+        "POST",
+        "/tasks",
+        &cookie,
+        &csrf,
+        json!({"title":"不允许的第二级", "parent_id":child_id, "project_id":project_id}),
+    )
+    .await;
+    assert_eq!(grandchild.status(), StatusCode::BAD_REQUEST);
+    let mismatch = write(
+        &app,
+        "POST",
+        "/tasks",
+        &cookie,
+        &csrf,
+        json!({"title":"不同项目", "parent_id":parent_id, "project_id":another_id}),
+    )
+    .await;
+    assert_eq!(mismatch.status(), StatusCode::BAD_REQUEST);
+    let cycle = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{parent_id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":1, "parent_id":child_id, "status":"completed"}),
+    )
+    .await;
+    assert_eq!(cycle.status(), StatusCode::BAD_REQUEST);
+    let move_parent = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{parent_id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":1, "project_id":another_id}),
+    )
+    .await;
+    assert_eq!(move_parent.status(), StatusCode::BAD_REQUEST);
+    let move_child = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{child_id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":1, "project_id":another_id}),
+    )
+    .await;
+    assert_eq!(move_child.status(), StatusCode::BAD_REQUEST);
+    let stale = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{child_id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":2, "status":"in_progress"}),
+    )
+    .await;
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
+    let unchanged_parent = send(
+        &app,
+        "GET",
+        &format!("/tasks/{parent_id}"),
+        None,
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    let unchanged_child = send(
+        &app,
+        "GET",
+        &format!("/tasks/{child_id}"),
+        None,
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(json_body(unchanged_parent).await["project_id"], project_id);
+    let unchanged_child = json_body(unchanged_child).await;
+    assert_eq!(unchanged_child["project_id"], project_id);
+    assert_eq!(unchanged_child["version"], 1);
+    let completion_count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM task_completion WHERE task_id = $1")
+            .bind(parent_id.parse::<i64>().unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(completion_count, 0);
+
+    let detach = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{child_id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":1, "parent_id":null}),
+    )
+    .await;
+    assert_eq!(detach.status(), StatusCode::OK);
+    let move_parent = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{parent_id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":1, "project_id":another_id}),
+    )
+    .await;
+    assert_eq!(move_parent.status(), StatusCode::OK);
+    let reattach = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{child_id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":2, "parent_id":parent_id, "project_id":another_id}),
+    )
+    .await;
+    assert_eq!(reattach.status(), StatusCode::OK);
+}
+
+#[sqlx::test]
+async fn 子任务完成事实独立于父任务(pool: PgPool) {
+    let (app, cookie, csrf) = session(&pool).await;
+    let parent = write(
+        &app,
+        "POST",
+        "/tasks",
+        &cookie,
+        &csrf,
+        json!({"title":"父任务"}),
+    )
+    .await;
+    let parent_id = json_body(parent).await["id"].as_str().unwrap().to_string();
+    let child = write(
+        &app,
+        "POST",
+        "/tasks",
+        &cookie,
+        &csrf,
+        json!({"title":"子任务", "parent_id":parent_id, "planned_date":"2026-09-29"}),
+    )
+    .await;
+    let child_id = json_body(child).await["id"].as_str().unwrap().to_string();
+    let complete_parent = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{parent_id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":1, "status":"completed"}),
+    )
+    .await;
+    assert_eq!(complete_parent.status(), StatusCode::OK);
+    let child_current = send(
+        &app,
+        "GET",
+        &format!("/tasks/{child_id}"),
+        None,
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(json_body(child_current).await["status"], "todo");
+    let complete = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{child_id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":1, "status":"completed", "due_date":"2026-09-30"}),
+    )
+    .await;
+    assert_eq!(complete.status(), StatusCode::OK);
+    assert_eq!(json_body(complete).await["due_date"], "2026-09-30");
+    let repeat = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{child_id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":2, "status":"completed"}),
+    )
+    .await;
+    assert_eq!(repeat.status(), StatusCode::OK);
+    let reopened = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{child_id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":2, "status":"todo"}),
+    )
+    .await;
+    assert_eq!(reopened.status(), StatusCode::OK);
+    let again = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{child_id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":3, "status":"completed"}),
+    )
+    .await;
+    assert_eq!(again.status(), StatusCode::OK);
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM task_completion WHERE task_id = $1")
+        .bind(child_id.parse::<i64>().unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 2);
+}
+
+#[sqlx::test]
+async fn 子任务数据库约束保护一级层级和项目归属(pool: PgPool) {
+    let parent: i64 = sqlx::query_scalar("INSERT INTO task (title) VALUES ('父任务') RETURNING id")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let child: i64 = sqlx::query_scalar(
+        "INSERT INTO task (title, parent_id) VALUES ('子任务', $1) RETURNING id",
+    )
+    .bind(parent)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let project: i64 =
+        sqlx::query_scalar("INSERT INTO project (name) VALUES ('项目') RETURNING id")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    for (savepoint, statement) in [
+        (
+            "grandchild",
+            format!("INSERT INTO task (title, parent_id) VALUES ('第二级', {child})"),
+        ),
+        (
+            "cycle",
+            format!("UPDATE task SET parent_id = {child} WHERE id = {parent}"),
+        ),
+        (
+            "self_parent",
+            format!("UPDATE task SET parent_id = {parent} WHERE id = {parent}"),
+        ),
+        (
+            "child_project",
+            format!("UPDATE task SET project_id = {project} WHERE id = {child}"),
+        ),
+        (
+            "parent_project",
+            format!("UPDATE task SET project_id = {project} WHERE id = {parent}"),
+        ),
+    ] {
+        sqlx::query(&format!("SAVEPOINT {savepoint}"))
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let error = sqlx::query(&statement).execute(&mut *tx).await.unwrap_err();
+        assert_eq!(
+            error.as_database_error().unwrap().code().as_deref(),
+            Some("23514")
+        );
+        sqlx::query(&format!("ROLLBACK TO SAVEPOINT {savepoint}"))
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+    }
+    tx.rollback().await.unwrap();
+    let index_count: i64 = sqlx::query_scalar("SELECT count(*) FROM pg_indexes WHERE tablename = 'task' AND indexname = 'task_parent_order_idx'")
+        .fetch_one(&pool).await.unwrap();
+    assert_eq!(index_count, 1);
+}
