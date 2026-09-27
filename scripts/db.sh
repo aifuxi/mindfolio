@@ -13,6 +13,7 @@ set -a
 source .env.db
 set +a
 export DATABASE_URL="postgres://mindfolio:${DB_PASSWORD}@127.0.0.1:${DB_PORT}/mindfolio_dev"
+export AUTH_ORIGIN="${AUTH_ORIGIN:-http://127.0.0.1:5173}"
 compose=(docker compose --env-file .env.db -f compose.db.yaml)
 
 case "${1:-}" in
@@ -30,6 +31,12 @@ case "${1:-}" in
     ;;
   dev-api)
     cargo run --locked -p mindfolio-api --bin mindfolio-api
+    ;;
+  admin-init)
+    cargo run --locked -p mindfolio-api --bin admin -- init
+    ;;
+  admin-reset)
+    cargo run --locked -p mindfolio-api --bin admin -- reset
     ;;
   prepare-test)
     existing="$("${compose[@]}" exec -T postgres psql -U mindfolio -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = 'mindfolio_test'")"
@@ -68,7 +75,7 @@ case "${1:-}" in
     echo '迁移冲突已明确报错'
     ;;
   *)
-    echo '用法：db.sh {start|stop|status|migrate|dev-api|prepare-test|test|verify-empty}' >&2
+    echo '用法：db.sh {start|stop|status|migrate|dev-api|admin-init|admin-reset|prepare-test|test|verify-empty}' >&2
     exit 2
     ;;
 esac

@@ -8,9 +8,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     mindfolio_api::migrate(&pool)
         .await
         .map_err(|error| std::io::Error::other(format!("数据库迁移失败：{error}")))?;
-    let address = "127.0.0.1:3001";
-    let listener = tokio::net::TcpListener::bind(address).await?;
+    let address = std::env::var("API_BIND").unwrap_or_else(|_| "127.0.0.1:3001".into());
+    let listener = tokio::net::TcpListener::bind(&address).await?;
     println!("API 正在监听 http://{address}");
-    axum::serve(listener, mindfolio_api::app(pool)).await?;
+    let auth = mindfolio_api::AuthConfig::from_env()?;
+    axum::serve(listener, mindfolio_api::app_with_config(pool, auth)).await?;
     Ok(())
 }

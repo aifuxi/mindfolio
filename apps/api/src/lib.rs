@@ -5,6 +5,9 @@ use serde::Serialize;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use utoipa::{OpenApi, ToSchema};
 
+mod auth;
+pub use auth::{AuthConfig, initialize_admin, reset_admin};
+
 #[derive(Serialize, ToSchema)]
 struct HealthStatus {
     status: HealthState,
@@ -27,12 +30,18 @@ struct ApiError {
 #[serde(rename_all = "snake_case")]
 enum ErrorCode {
     DatabaseUnavailable,
+    Unauthorized,
+    InvalidCredentials,
+    InvalidRequest,
+    Forbidden,
+    RateLimited,
+    AuthUnavailable,
 }
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(live, ready),
-    components(schemas(HealthStatus, HealthState, ApiError, ErrorCode)),
+    paths(live, ready, auth::login, auth::session, auth::logout),
+    components(schemas(HealthStatus, HealthState, ApiError, ErrorCode, auth::LoginRequest, auth::SessionResponse)),
     servers((url = "/api"))
 )]
 struct ApiDoc;
@@ -42,6 +51,16 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     document.openapi = utoipa::openapi::OpenApiVersion::Version31;
     document.info.description = Some("Mindfolio 管理端 API".to_string());
     document.info.license = None;
+    if let Some(components) = document.components.as_mut() {
+        components.add_security_scheme(
+            "admin_session",
+            utoipa::openapi::security::SecurityScheme::ApiKey(
+                utoipa::openapi::security::ApiKey::Cookie(
+                    utoipa::openapi::security::ApiKeyValue::new("__Host-mf_session"),
+                ),
+            ),
+        );
+    }
     document
 }
 
@@ -88,9 +107,14 @@ async fn ready(
 }
 
 pub fn app(pool: PgPool) -> Router {
+    app_with_config(pool, AuthConfig::local())
+}
+
+pub fn app_with_config(pool: PgPool, config: AuthConfig) -> Router {
     Router::new()
         .route("/health/live", get(live))
         .route("/health/ready", get(ready))
+        .merge(auth::routes(pool.clone(), config))
         .with_state(pool)
 }
 

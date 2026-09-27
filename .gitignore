@@ -26,6 +26,8 @@ temp/
 
 # 前端依赖与缓存
 node_modules/
+playwright-report/
+test-results/
 .npm/
 .pnpm-store/
 .yarn/cache/

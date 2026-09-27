@@ -1,6 +1,6 @@
 # 实现唯一管理者账号、登录与会话
 
-Status: ready-for-agent
+Status: done
 
 ## 目标
 
@@ -30,3 +30,15 @@ Status: ready-for-agent
 - 依赖任务 01、02、03。
 - 本任务不实现多管理者、第三方登录、邮件找回密码或个人管理业务 API。
 - 完成时记录初始化与重置操作、配置项、验证结果和剩余风险，不记录真实凭据。
+
+## 验收记录
+
+- 2026-09-27：在 macOS arm64 使用 `mise run ci` 完整通过。真实 PostgreSQL 的隔离数据库测试覆盖唯一管理者初始化及拒绝重复初始化、Argon2id 哈希、未知账号与错误密码同响应、正确密码登录、Session 摘要存储和轮换、空闲与绝对过期、退出及密码重置撤销旧会话、登录限流、CSRF 缺失或错误、来源不匹配与公开存活接口。测试没有保存真实凭据。
+- Chromium 浏览器测试覆盖未登录跳转、登录、刷新保持会话、会话过期和退出；同次测试经 Vite 同源 `/api` 代理访问实际 Rust 存活接口，确认路径转发。页面认证响应使用测试拦截，服务器行为由真实 PostgreSQL 集成测试独立验证。
+- 开发模式 Cookie 经 HTTP 测试确认 `HttpOnly`、`SameSite=Strict`、`Path=/` 且无 `Secure`；HTTPS 配置经 API 测试确认 `__Host-` 前缀、`Secure`、`HttpOnly`、`SameSite=Strict`、`Path=/` 且无 `Domain`，非本机 HTTP origin 被拒绝。生产管理子域 Caddy 代理示例通过 `caddy:2.10.2-alpine` 的配置校验。
+- `mise run contract:generate` 更新 Rust DTO 派生的 OpenAPI 与 TypeScript 类型；`mise run contract:check`、格式检查、Clippy、ESLint、Vue 类型检查、数据库测试、浏览器测试和双端构建由 `mise run ci` 通过。管理者初始化和重置入口分别为 `ADMIN_USERNAME=owner mise run admin:init` 与 `mise run admin:reset`，两者在终端交互式读取密码。
+
+## 遗留问题与下一步
+
+- 目标 VPS、实际管理子域和证书尚未提供，因此没有在目标生产 HTTPS 入口实测 Cookie、代理及 Argon2id 资源占用。上线前在目标机器设置 `AUTH_ORIGIN`、内部 `API_BIND`，按实际并发与资源测量并调整哈希参数、限流和 Session 有效期，再通过真实 HTTPS 浏览器完成登录与退出验收。
+- 当前登录限流为单 API 进程的全局内存时间窗，适合首版单实例部署；若以后启用多实例，应迁移至共享存储并重新评估阈值。后续私人业务路由必须逐请求使用同一认证与写请求 CSRF/来源边界，不可只依赖前端路由保护。

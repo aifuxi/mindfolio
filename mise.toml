@@ -30,7 +30,7 @@ run = ["cargo fmt --all -- --check", "pnpm exec prettier --check apps/admin scri
 
 [tasks.lint]
 depends = ["setup"]
-run = ["cargo clippy --workspace --all-targets --locked -- -D warnings", "pnpm exec eslint apps/admin/src apps/admin/vite.config.ts eslint.config.js scripts/contract.mjs --max-warnings 0"]
+run = ["cargo clippy --workspace --all-targets --locked -- -D warnings", "pnpm exec eslint apps/admin/src apps/admin/e2e apps/admin/vite.config.ts apps/admin/playwright.config.ts eslint.config.js scripts/contract.mjs --max-warnings 0"]
 
 [tasks."contract:generate"]
 description = "从 Rust DTO 生成 OpenAPI 与 TypeScript 类型"
@@ -52,7 +52,7 @@ depends = ["fmt:check", "lint", "typecheck"]
 
 [tasks.test]
 depends = ["db:start"]
-run = ["bash scripts/db.sh test", "pnpm --filter @mindfolio/admin test"]
+run = ["bash scripts/db.sh test", "pnpm --filter @mindfolio/admin test", "pnpm --filter @mindfolio/admin exec playwright install --with-deps chromium", "pnpm --filter @mindfolio/admin test:browser"]
 
 [tasks."db:start"]
 description = "启动本地 PostgreSQL"
@@ -71,6 +71,16 @@ run = "bash scripts/db.sh status"
 description = "迁移开发数据库"
 depends = ["db:start"]
 run = "bash scripts/db.sh migrate"
+
+[tasks."admin:init"]
+description = "交互式初始化唯一管理者；需先设置 ADMIN_USERNAME"
+depends = ["db:start"]
+run = "bash scripts/db.sh admin-init"
+
+[tasks."admin:reset"]
+description = "交互式重置管理者密码并撤销全部会话"
+depends = ["db:start"]
+run = "bash scripts/db.sh admin-reset"
 
 [tasks."db:prepare:test"]
 description = "准备隔离的测试数据库"

@@ -28,6 +28,8 @@ export default [
     files: [
       "eslint.config.js",
       "apps/admin/vite.config.ts",
+      "apps/admin/playwright.config.ts",
+      "apps/admin/e2e/**/*.ts",
       "scripts/contract.mjs",
     ],
     languageOptions: { globals: globals.node },
