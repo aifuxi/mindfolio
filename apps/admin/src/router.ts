@@ -7,6 +7,7 @@ import HistoryView from "./views/HistoryView.vue";
 import LoginView from "./views/LoginView.vue";
 import TasksView from "./views/TasksView.vue";
 import TodayView from "./views/TodayView.vue";
+import WeeklyReviewView from "./views/WeeklyReviewView.vue";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -46,6 +47,12 @@ export const router = createRouter({
       path: "/today",
       name: "today",
       component: TodayView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/weekly-review",
+      name: "weekly-review",
+      component: WeeklyReviewView,
       meta: { requiresAuth: true },
     },
   ],

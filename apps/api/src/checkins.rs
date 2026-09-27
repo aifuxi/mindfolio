@@ -108,6 +108,12 @@ pub(crate) struct Rate {
 }
 
 #[derive(Serialize, ToSchema)]
+pub(crate) struct WeekSnapshot {
+    pub(crate) rate: Rate,
+    pub(crate) days: Vec<CalendarDay>,
+}
+
+#[derive(Serialize, ToSchema)]
 pub(crate) struct CalendarResponse {
     month: String,
     today: String,
@@ -292,6 +298,87 @@ fn week_rate(days: &[DayFact]) -> Rate {
         earned += f64::from(done.min(goal));
     }
     rate(earned, possible)
+}
+
+pub(crate) async fn week_snapshot(
+    pool: &PgPool,
+    id: i64,
+    start: NaiveDate,
+    today: NaiveDate,
+) -> Result<WeekSnapshot, HabitFailure> {
+    let end = start + Duration::days(7);
+    let bound = boundary(pool, id).await?;
+    let settings: Vec<Setting> = sqlx::query_as("SELECT id, effective_on, name, cadence, weekly_target FROM habit_setting WHERE habit_id = $1 AND effective_on < $2 ORDER BY effective_on, id").bind(id).bind(end).fetch_all(pool).await.map_err(|_| unavailable())?;
+    let pauses: Vec<Pause> = sqlx::query_as("SELECT start_on, end_on FROM habit_pause WHERE habit_id = $1 AND start_on < $2 AND (end_on IS NULL OR end_on > $3) ORDER BY start_on").bind(id).bind(end).bind(start).fetch_all(pool).await.map_err(|_| unavailable())?;
+    let checkins: Vec<CheckinRow> = sqlx::query_as("SELECT id, habit_id, business_date, completed, note, version FROM habit_checkin WHERE habit_id = $1 AND business_date >= $2 AND business_date < $3 ORDER BY business_date").bind(id).bind(start).bind(end).fetch_all(pool).await.map_err(|_| unavailable())?;
+    let deleted_on = bound.deleted_at.map(|v| {
+        v.with_timezone(&chrono::FixedOffset::east_opt(8 * 3600).unwrap())
+            .date_naive()
+    });
+    let mut facts = Vec::new();
+    let mut days = Vec::new();
+    let mut setting_index = 0usize;
+    let mut checkin_index = 0usize;
+    let mut day = start;
+    while day < end {
+        while setting_index + 1 < settings.len() && settings[setting_index + 1].effective_on <= day
+        {
+            setting_index += 1;
+        }
+        while checkin_index < checkins.len() && checkins[checkin_index].business_date < day {
+            checkin_index += 1;
+        }
+        let setting = settings
+            .get(setting_index)
+            .filter(|s| s.effective_on <= day);
+        let checkin = checkins
+            .get(checkin_index)
+            .filter(|c| c.business_date == day);
+        let paused = pauses
+            .iter()
+            .any(|p| p.start_on <= day && p.end_on.is_none_or(|end| day < end));
+        let inactive = day < bound.created_on || deleted_on.is_some_and(|deleted| day > deleted);
+        let eligible = !inactive && day <= today && !paused && setting.is_some();
+        let state = if day < bound.created_on {
+            DayState::BeforeCreation
+        } else if deleted_on.is_some_and(|deleted| day > deleted) {
+            DayState::Deleted
+        } else if day > today {
+            DayState::Future
+        } else if paused {
+            DayState::Paused
+        } else if checkin.is_some_and(|c| c.completed) {
+            DayState::Completed
+        } else if checkin.is_some() {
+            DayState::Incomplete
+        } else {
+            DayState::Missed
+        };
+        if let Some(s) = setting {
+            facts.push(DayFact {
+                date: day,
+                setting_id: s.id,
+                cadence: s.cadence.clone(),
+                target: s.weekly_target.unwrap_or(1),
+                eligible,
+                completed: checkin.is_some_and(|c| c.completed),
+            });
+        }
+        days.push(CalendarDay {
+            date: day.to_string(),
+            state,
+            name: setting.map(|s| s.name.clone()),
+            cadence: setting.map(|s| s.cadence.clone()),
+            weekly_target: setting.and_then(|s| s.weekly_target),
+            note: checkin.map(|c| c.note.clone()),
+            checkin_version: checkin.map(|c| c.version),
+        });
+        day += Duration::days(1);
+    }
+    Ok(WeekSnapshot {
+        rate: week_rate(&facts),
+        days,
+    })
 }
 
 #[utoipa::path(get, path = "/habits/{id}/calendar", operation_id = "get_habit_calendar", security(("admin_session" = [])), params(("id" = String, Path), ("month" = String, Query)), responses((status = 200, body = CalendarResponse), (status = 400, body = ApiError), (status = 401, body = ApiError), (status = 404, body = ApiError), (status = 503, body = ApiError)))]

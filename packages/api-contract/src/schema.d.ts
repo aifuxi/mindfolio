@@ -424,6 +424,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/weekly-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_weekly_review"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -620,6 +636,27 @@ export interface components {
             expected_version: number;
             name: string;
         };
+        ReviewCompletion: {
+            business_date: string;
+            completed_at: string;
+            id: string;
+            project_name?: string | null;
+            task_exists: boolean;
+            task_id: string;
+            task_title: string;
+        };
+        ReviewHabit: {
+            current_exists: boolean;
+            id: string;
+            name: string;
+            snapshot: components["schemas"]["WeekSnapshot"];
+        };
+        ReviewJournal: {
+            body: string;
+            business_date: string;
+            /** Format: int64 */
+            version: number;
+        };
         SaveCheckin: {
             completed: boolean;
             /** Format: int64 */
@@ -723,6 +760,22 @@ export interface components {
         WeekRate: {
             ends_on: string;
             rate: components["schemas"]["Rate"];
+            starts_on: string;
+        };
+        WeekSnapshot: {
+            days: components["schemas"]["CalendarDay"][];
+            rate: components["schemas"]["Rate"];
+        };
+        WeeklyReview: {
+            completions: components["schemas"]["ReviewCompletion"][];
+            dates: string[];
+            ends_on: string;
+            habits: components["schemas"]["ReviewHabit"][];
+            has_more_completions: boolean;
+            has_more_habits: boolean;
+            journals: components["schemas"]["ReviewJournal"][];
+            /** Format: int64 */
+            page: number;
             starts_on: string;
         };
     };
@@ -2830,6 +2883,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TodayTaskPage"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    get_weekly_review: {
+        parameters: {
+            query?: {
+                date?: string;
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeeklyReview"];
                 };
             };
             400: {

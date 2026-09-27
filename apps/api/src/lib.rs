@@ -13,6 +13,7 @@ mod journal;
 mod projects;
 mod tasks;
 mod today_overview;
+mod weekly_review;
 pub use auth::{AuthConfig, initialize_admin, reset_admin};
 pub use tasks::TodayClock;
 
@@ -50,8 +51,8 @@ enum ErrorCode {
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(live, ready, auth::login, auth::session, auth::logout, projects::list, projects::create, projects::detail, projects::rename, projects::complete, projects::archive, projects::restore, projects::delete, tasks::list, tasks::list_subtasks, tasks::create, tasks::detail, tasks::update, tasks::delete, tasks::today::today_tasks, tasks::today::plan_today, completions::list, completions::days, habits::list, habits::create, habits::detail, habits::update, habits::pause, habits::resume, habits::delete, checkins::list, checkins::save, checkins::calendar, journal::day, journal::save, today_overview::overview),
-    components(schemas(HealthStatus, HealthState, ApiError, ErrorCode, auth::LoginRequest, auth::SessionResponse, projects::ProjectResponse, projects::ProjectPage, projects::CreateProject, projects::RenameProject, projects::VersionRequest, tasks::TaskStatus, tasks::TaskPriority, tasks::TaskResponse, tasks::TaskPage, tasks::CreateTask, tasks::UpdateTask, tasks::DeleteTask, tasks::today::TodayReason, tasks::today::TodayTaskResponse, tasks::today::TodayTaskPage, tasks::today::PlanTodayRequest, completions::CompletionResponse, completions::CompletionPage, completions::DaySummary, completions::DayPage, habits::HabitResponse, habits::HabitPage, habits::HabitInput, habits::HabitUpdate, habits::VersionRequest, habits::SettingResponse, habits::PauseResponse, habits::HabitDetail, checkins::CheckinResponse, checkins::CheckinList, checkins::SaveCheckin, checkins::DayState, checkins::CalendarDay, checkins::Rate, checkins::WeekRate, checkins::CalendarResponse, journal::JournalResponse, journal::DayCompletion, journal::DayCheckin, journal::JournalDay, journal::SaveJournal, today_overview::TodayHabit, today_overview::TodayOverview)),
+    paths(live, ready, auth::login, auth::session, auth::logout, projects::list, projects::create, projects::detail, projects::rename, projects::complete, projects::archive, projects::restore, projects::delete, tasks::list, tasks::list_subtasks, tasks::create, tasks::detail, tasks::update, tasks::delete, tasks::today::today_tasks, tasks::today::plan_today, completions::list, completions::days, habits::list, habits::create, habits::detail, habits::update, habits::pause, habits::resume, habits::delete, checkins::list, checkins::save, checkins::calendar, journal::day, journal::save, today_overview::overview, weekly_review::review),
+    components(schemas(HealthStatus, HealthState, ApiError, ErrorCode, auth::LoginRequest, auth::SessionResponse, projects::ProjectResponse, projects::ProjectPage, projects::CreateProject, projects::RenameProject, projects::VersionRequest, tasks::TaskStatus, tasks::TaskPriority, tasks::TaskResponse, tasks::TaskPage, tasks::CreateTask, tasks::UpdateTask, tasks::DeleteTask, tasks::today::TodayReason, tasks::today::TodayTaskResponse, tasks::today::TodayTaskPage, tasks::today::PlanTodayRequest, completions::CompletionResponse, completions::CompletionPage, completions::DaySummary, completions::DayPage, habits::HabitResponse, habits::HabitPage, habits::HabitInput, habits::HabitUpdate, habits::VersionRequest, habits::SettingResponse, habits::PauseResponse, habits::HabitDetail, checkins::CheckinResponse, checkins::CheckinList, checkins::SaveCheckin, checkins::DayState, checkins::CalendarDay, checkins::Rate, checkins::WeekRate, checkins::CalendarResponse, checkins::WeekSnapshot, journal::JournalResponse, journal::DayCompletion, journal::DayCheckin, journal::JournalDay, journal::SaveJournal, today_overview::TodayHabit, today_overview::TodayOverview, weekly_review::ReviewCompletion, weekly_review::ReviewJournal, weekly_review::ReviewHabit, weekly_review::WeeklyReview)),
     servers((url = "/api"))
 )]
 struct ApiDoc;
@@ -140,7 +141,8 @@ pub fn app_with_config_and_today_clock(
                 .merge(habits::routes().layer(axum::Extension(clock.clone())))
                 .merge(checkins::routes().layer(axum::Extension(clock.clone())))
                 .merge(journal::routes().layer(axum::Extension(clock.clone())))
-                .merge(today_overview::routes().layer(axum::Extension(clock))),
+                .merge(today_overview::routes().layer(axum::Extension(clock.clone())))
+                .merge(weekly_review::routes().layer(axum::Extension(clock))),
             pool.clone(),
             config.clone(),
         ))

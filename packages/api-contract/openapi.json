@@ -3047,6 +3047,76 @@
           }
         ]
       }
+    },
+    "/weekly-review": {
+      "get": {
+        "tags": [
+          "weekly_review"
+        ],
+        "operationId": "get_weekly_review",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyReview"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -3833,6 +3903,86 @@
           }
         }
       },
+      "ReviewCompletion": {
+        "type": "object",
+        "required": [
+          "id",
+          "task_id",
+          "task_title",
+          "completed_at",
+          "business_date",
+          "task_exists"
+        ],
+        "properties": {
+          "business_date": {
+            "type": "string"
+          },
+          "completed_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "project_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "task_exists": {
+            "type": "boolean"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "task_title": {
+            "type": "string"
+          }
+        }
+      },
+      "ReviewHabit": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "current_exists",
+          "snapshot"
+        ],
+        "properties": {
+          "current_exists": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/WeekSnapshot"
+          }
+        }
+      },
+      "ReviewJournal": {
+        "type": "object",
+        "required": [
+          "business_date",
+          "body",
+          "version"
+        ],
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "business_date": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "SaveCheckin": {
         "type": "object",
         "required": [
@@ -4274,6 +4424,80 @@
           },
           "rate": {
             "$ref": "#/components/schemas/Rate"
+          },
+          "starts_on": {
+            "type": "string"
+          }
+        }
+      },
+      "WeekSnapshot": {
+        "type": "object",
+        "required": [
+          "rate",
+          "days"
+        ],
+        "properties": {
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CalendarDay"
+            }
+          },
+          "rate": {
+            "$ref": "#/components/schemas/Rate"
+          }
+        }
+      },
+      "WeeklyReview": {
+        "type": "object",
+        "required": [
+          "starts_on",
+          "ends_on",
+          "dates",
+          "page",
+          "completions",
+          "has_more_completions",
+          "journals",
+          "habits",
+          "has_more_habits"
+        ],
+        "properties": {
+          "completions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewCompletion"
+            }
+          },
+          "dates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ends_on": {
+            "type": "string"
+          },
+          "habits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewHabit"
+            }
+          },
+          "has_more_completions": {
+            "type": "boolean"
+          },
+          "has_more_habits": {
+            "type": "boolean"
+          },
+          "journals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewJournal"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int64"
           },
           "starts_on": {
             "type": "string"
