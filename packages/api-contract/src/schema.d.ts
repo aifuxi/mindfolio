@@ -391,6 +391,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/today/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_today_overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/today/tasks": {
         parameters: {
             query?: never;
@@ -651,6 +667,28 @@ export interface components {
         };
         /** @enum {string} */
         TaskStatus: "todo" | "in_progress" | "completed" | "canceled";
+        TodayHabit: {
+            cadence: string;
+            checkin_completed?: boolean | null;
+            checkin_note?: string | null;
+            /** Format: int64 */
+            checkin_version?: number | null;
+            id: string;
+            name: string;
+            needs_checkin: boolean;
+            /** Format: int64 */
+            version: number;
+            /** Format: int32 */
+            weekly_target?: number | null;
+        };
+        TodayOverview: {
+            business_date: string;
+            habits: components["schemas"]["TodayHabit"][];
+            has_more: boolean;
+            journal_exists: boolean;
+            /** Format: int64 */
+            page: number;
+        };
         /** @enum {string} */
         TodayReason: "overdue" | "due_today" | "planned_today";
         TodayTaskPage: {
@@ -2713,6 +2751,51 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    get_today_overview: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TodayOverview"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

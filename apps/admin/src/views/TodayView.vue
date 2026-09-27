@@ -3,8 +3,10 @@ import { Button } from "@aifuxi/semi-ui-vue/button";
 import { computed, onMounted, ref } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { currentSession } from "../auth";
+import { HabitRequestError, saveHabitCheckin } from "../habits";
 import { ProjectRequestError, listProjects, type Project } from "../projects";
 import { TaskRequestError, listTodayTasks, type TodayTask } from "../tasks";
+import { TodayRequestError, getTodayOverview, type TodayHabit } from "../today";
 
 const router = useRouter();
 const projects = ref<Project[]>([]);
@@ -13,6 +15,16 @@ const businessDate = ref("");
 const page = ref(1);
 const hasMore = ref(false);
 const error = ref("");
+const habits = ref<TodayHabit[]>([]);
+const habitPage = ref(1);
+const hasMoreHabits = ref(false);
+const journalExists = ref(false);
+const editingHabitId = ref<string | null>(null);
+const habitCompleted = ref(true);
+const habitNote = ref("");
+const habitVersion = ref<number | null>(null);
+const busyHabit = ref(false);
+const notice = ref("");
 
 const groups = computed(() => [
   {
@@ -40,12 +52,56 @@ const groups = computed(() => [
 function handleError(cause: unknown) {
   if (
     (cause instanceof TaskRequestError ||
-      cause instanceof ProjectRequestError) &&
+      cause instanceof ProjectRequestError ||
+      cause instanceof HabitRequestError ||
+      cause instanceof TodayRequestError) &&
     cause.status === 401
   ) {
     void router.replace({ name: "login" });
   }
   error.value = cause instanceof Error ? cause.message : "读取今日任务失败";
+}
+
+async function loadOverview() {
+  try {
+    const result = await getTodayOverview(habitPage.value);
+    habits.value = result.habits;
+    hasMoreHabits.value = result.has_more;
+    journalExists.value = result.journal_exists;
+    businessDate.value = result.business_date;
+    error.value = "";
+  } catch (cause) {
+    handleError(cause);
+  }
+}
+
+function editHabit(habit: TodayHabit) {
+  editingHabitId.value = habit.id;
+  habitCompleted.value = habit.checkin_completed ?? true;
+  habitNote.value = habit.checkin_note ?? "";
+  habitVersion.value = habit.checkin_version ?? null;
+  notice.value = "";
+}
+
+async function saveTodayHabit(habit: TodayHabit) {
+  if (busyHabit.value || !businessDate.value) return;
+  busyHabit.value = true;
+  try {
+    await saveHabitCheckin(
+      habit.id,
+      businessDate.value,
+      habitCompleted.value,
+      habitNote.value,
+      habitVersion.value,
+    );
+    editingHabitId.value = null;
+    notice.value = "今日习惯打卡已保存";
+    await loadOverview();
+  } catch (cause) {
+    handleError(cause);
+  } finally {
+    busyHabit.value = false;
+  }
 }
 
 async function load() {
@@ -91,6 +147,7 @@ function statusLabel(value: string) {
 onMounted(() => {
   void load();
   void loadProjects();
+  void loadOverview();
 });
 </script>
 
@@ -106,12 +163,97 @@ onMounted(() => {
         <nav class="links" aria-label="返回">
           <RouterLink to="/">返回项目</RouterLink>
           <RouterLink to="/tasks">查看全部任务</RouterLink>
+          <RouterLink to="/habits">管理习惯</RouterLink>
         </nav>
       </header>
       <p class="intro">
         {{ businessDate }} · 计划今天、今天到期或已逾期的待处理任务
       </p>
       <p v-if="error" class="message error" role="alert">{{ error }}</p>
+      <p v-if="notice" class="message success" role="status">{{ notice }}</p>
+      <section class="group" aria-label="今日习惯">
+        <h2>
+          今日习惯 <span>{{ habits.length }}</span>
+        </h2>
+        <p v-if="habits.length === 0" class="empty">今天没有需要执行的习惯。</p>
+        <ul v-else class="task-list">
+          <li v-for="habit in habits" :key="habit.id" class="task-card">
+            <div class="task-main">
+              <h3>{{ habit.name }}</h3>
+              <p class="meta">
+                <span>{{
+                  habit.cadence === "daily"
+                    ? "每天"
+                    : `每周 ${habit.weekly_target} 天`
+                }}</span
+                ><span v-if="habit.checkin_completed === true">今天已完成</span
+                ><span v-else-if="habit.needs_checkin" class="pending"
+                  >待打卡</span
+                ><span v-else>本周目标已达成</span>
+              </p>
+            </div>
+            <Button theme="outline" @click="editHabit(habit)">{{
+              habit.checkin_version ? "更正打卡" : "打卡"
+            }}</Button>
+            <form
+              v-if="editingHabitId === habit.id"
+              class="habit-form"
+              @submit.prevent="saveTodayHabit(habit)"
+            >
+              <label
+                ><input v-model="habitCompleted" type="checkbox" />已完成</label
+              >
+              <label :for="`habit-note-${habit.id}`">备注</label
+              ><input
+                :id="`habit-note-${habit.id}`"
+                v-model="habitNote"
+                maxlength="2000"
+              />
+              <Button
+                html-type="submit"
+                type="primary"
+                theme="solid"
+                :disabled="busyHabit"
+                >保存打卡</Button
+              >
+            </form>
+          </li>
+        </ul>
+        <nav v-if="habitPage > 1 || hasMoreHabits" class="pagination">
+          <Button
+            :disabled="habitPage === 1"
+            @click="
+              habitPage--;
+              loadOverview();
+            "
+            >上一页习惯</Button
+          ><span>第 {{ habitPage }} 页</span
+          ><Button
+            :disabled="!hasMoreHabits"
+            @click="
+              habitPage++;
+              loadOverview();
+            "
+            >下一页习惯</Button
+          >
+        </nav>
+      </section>
+      <section class="group" aria-label="今日记录">
+        <h2>今日记录</h2>
+        <div class="task-card">
+          <p>
+            {{
+              journalExists
+                ? "今天已有每日记录，可继续编辑。"
+                : "今天还没有每日记录。"
+            }}
+          </p>
+          <RouterLink
+            :to="{ name: 'journal', params: { date: businessDate } }"
+            >{{ journalExists ? "编辑每日记录" : "写每日记录" }}</RouterLink
+          >
+        </div>
+      </section>
       <p v-if="items.length === 0 && !error" class="empty">
         今天没有需要处理的任务。
       </p>
@@ -289,6 +431,26 @@ h3 {
   background: #fcebed;
   color: #91232a;
   font-weight: 600;
+}
+.meta .pending {
+  background: #fff1d6;
+  color: #7b4d00;
+  font-weight: 600;
+}
+.habit-form {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 15rem;
+}
+.habit-form input:not([type="checkbox"]) {
+  padding: 0.5rem;
+  border: 1px solid #aab3c0;
+  border-radius: 0.4rem;
+  font: inherit;
+}
+.success {
+  background: #e4f4e9;
+  color: #24613b;
 }
 .empty {
   color: #626c7a;

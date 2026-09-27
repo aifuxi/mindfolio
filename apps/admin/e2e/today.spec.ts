@@ -131,6 +131,20 @@ test("从收件箱安排到今天并从今日任务进入原任务", async ({ pa
     });
   });
 
+  await page.route("**/api/today/overview**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        business_date: "2026-09-28",
+        habits: [],
+        page: 1,
+        has_more: false,
+        journal_exists: false,
+      }),
+    });
+  });
+
   await page.goto("/");
   await page.getByLabel("账号").fill("owner");
   await page.getByLabel("密码").fill("correct horse battery staple");

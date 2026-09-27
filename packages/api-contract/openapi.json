@@ -2923,6 +2923,68 @@
         ]
       }
     },
+    "/today/overview": {
+      "get": {
+        "tags": [
+          "today_overview"
+        ],
+        "operationId": "get_today_overview",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TodayOverview"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ]
+      }
+    },
     "/today/tasks": {
       "get": {
         "tags": [
@@ -3965,6 +4027,91 @@
           "completed",
           "canceled"
         ]
+      },
+      "TodayHabit": {
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "name",
+          "cadence",
+          "needs_checkin"
+        ],
+        "properties": {
+          "cadence": {
+            "type": "string"
+          },
+          "checkin_completed": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "checkin_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "checkin_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "needs_checkin": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "weekly_target": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "TodayOverview": {
+        "type": "object",
+        "required": [
+          "business_date",
+          "habits",
+          "page",
+          "has_more",
+          "journal_exists"
+        ],
+        "properties": {
+          "business_date": {
+            "type": "string"
+          },
+          "habits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TodayHabit"
+            }
+          },
+          "has_more": {
+            "type": "boolean"
+          },
+          "journal_exists": {
+            "type": "boolean"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
       },
       "TodayReason": {
         "type": "string",
