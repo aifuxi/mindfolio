@@ -1,0 +1,46 @@
+# 系统与编辑器文件
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 本地环境变量；示例文件可提交
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# 日志与临时文件
+*.log
+logs/
+tmp/
+temp/
+
+# 前端依赖与缓存
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/install-state.gz
+.pnp.*
+.vite/
+*.tsbuildinfo
+
+# 前端构建与测试产物
+dist/
+dist-ssr/
+build/
+coverage/
+.next/
+.nuxt/
+.output/
+.svelte-kit/
+.astro/
+
+# Rust 编译产物
+target/
+**/*.rs.bk
+*.pdb
