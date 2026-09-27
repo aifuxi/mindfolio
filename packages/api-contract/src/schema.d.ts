@@ -193,6 +193,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/journal/{date}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_journal_day"];
+        put: operations["save_journal"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects": {
         parameters: {
             query?: never;
@@ -460,6 +476,20 @@ export interface components {
             tags?: string[] | null;
             title: string;
         };
+        DayCheckin: {
+            completed: boolean;
+            habit_id: string;
+            id: string;
+            name: string;
+            note: string;
+        };
+        DayCompletion: {
+            completed_at: string;
+            id: string;
+            project_name?: string | null;
+            task_id: string;
+            task_title: string;
+        };
         DayPage: {
             has_more: boolean;
             items: components["schemas"]["DaySummary"][];
@@ -521,6 +551,20 @@ export interface components {
         HealthStatus: {
             status: components["schemas"]["HealthState"];
         };
+        JournalDay: {
+            business_date: string;
+            checkins: components["schemas"]["DayCheckin"][];
+            completions: components["schemas"]["DayCompletion"][];
+            journal?: components["schemas"]["JournalResponse"] | null;
+        };
+        JournalResponse: {
+            body: string;
+            business_date: string;
+            created_at: string;
+            updated_at: string;
+            /** Format: int64 */
+            version: number;
+        };
         LoginRequest: {
             password: string;
             username: string;
@@ -565,6 +609,11 @@ export interface components {
             /** Format: int64 */
             expected_version?: number | null;
             note: string;
+        };
+        SaveJournal: {
+            body: string;
+            /** Format: int64 */
+            expected_version?: number | null;
         };
         SessionResponse: {
             csrf_token: string;
@@ -1480,6 +1529,118 @@ export interface operations {
                 };
             };
             /** @description 数据库不可用 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    get_journal_day: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                date: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalDay"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    save_journal: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-csrf-token": string;
+            };
+            path: {
+                date: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveJournal"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalResponse"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
             503: {
                 headers: {
                     [name: string]: unknown;

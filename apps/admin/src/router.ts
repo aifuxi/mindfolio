@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { refreshSession } from "./auth";
 import HomeView from "./views/HomeView.vue";
 import HabitsView from "./views/HabitsView.vue";
+import JournalView from "./views/JournalView.vue";
 import HistoryView from "./views/HistoryView.vue";
 import LoginView from "./views/LoginView.vue";
 import TasksView from "./views/TasksView.vue";
@@ -15,6 +16,12 @@ export const router = createRouter({
       path: "/habits",
       name: "habits",
       component: HabitsView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/journal/:date?",
+      name: "journal",
+      component: JournalView,
       meta: { requiresAuth: true },
     },
     {
