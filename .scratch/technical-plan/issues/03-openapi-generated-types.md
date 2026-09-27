@@ -35,6 +35,7 @@ Status: done
 - 临时把真实 `HealthStatus.status` 序列化字段改为 `state` 后重新生成，OpenAPI 与 TypeScript 均同步出现 `state`；恢复 DTO 并重新生成后，产物回到 `status`。
 - 手工破坏生成的 TypeScript 文件后，`mise run contract:check` 和 `mise run ci` 均返回非零并提示 `mise run contract:generate`；破坏内容仍在，确认检查未自动修复。临时改坏生成的路径类型后，独立 Vue 类型检查报错，证明管理端实际依赖生成类型。所有临时变更已还原。
 - 完整 `mise run ci` 通过。通过本地 Vite 同源 `/api` 代理请求时，`/api/health/live` 与 `/api/health/ready` 均返回 HTTP 200 及 `{"status":"ok"}`；停库后就绪接口返回 HTTP 503，包含 `database_unavailable`、中文消息和 UUID 请求标识，与生成契约一致。开发服务和数据库容器已停止。
+- [GitHub Actions Ubuntu Linux x64 检查](https://github.com/aifuxi/mindfolio/actions/runs/36319753019)通过，远端执行了相同的 `mise run ci` 与契约漂移检查。
 
 ## 遗留问题与下一步
 
