@@ -8,8 +8,8 @@ description = "安装锁定依赖"
 run = ["mise install --locked rust node pnpm", "bash scripts/verify-toolchain.sh", "pnpm install --frozen-lockfile", "cargo fetch --locked"]
 
 [tasks."dev:api"]
-depends = ["setup"]
-run = "cargo run --locked -p mindfolio-api"
+depends = ["db:start"]
+run = "bash scripts/db.sh dev-api"
 
 [tasks."dev:admin"]
 depends = ["setup"]
@@ -41,8 +41,36 @@ description = "执行格式、lint 与类型检查"
 depends = ["fmt:check", "lint", "typecheck"]
 
 [tasks.test]
+depends = ["db:start"]
+run = ["bash scripts/db.sh test", "pnpm --filter @mindfolio/admin test"]
+
+[tasks."db:start"]
+description = "启动本地 PostgreSQL"
 depends = ["setup"]
-run = ["cargo test --workspace --locked", "pnpm --filter @mindfolio/admin test"]
+run = "bash scripts/db.sh start"
+
+[tasks."db:stop"]
+description = "停止本地 PostgreSQL 并保留数据卷"
+run = "bash scripts/db.sh stop"
+
+[tasks."db:status"]
+description = "查询本地 PostgreSQL 状态"
+run = "bash scripts/db.sh status"
+
+[tasks."db:migrate"]
+description = "迁移开发数据库"
+depends = ["db:start"]
+run = "bash scripts/db.sh migrate"
+
+[tasks."db:prepare:test"]
+description = "准备隔离的测试数据库"
+depends = ["db:start"]
+run = "bash scripts/db.sh prepare-test"
+
+[tasks."db:verify:empty"]
+description = "验证空库和重复迁移"
+depends = ["db:start"]
+run = "bash scripts/db.sh verify-empty"
 
 [tasks.build]
 depends = ["setup"]
@@ -50,4 +78,4 @@ run = ["cargo build --workspace --locked", "pnpm --filter @mindfolio/admin build
 
 [tasks.ci]
 description = "执行全部质量检查、测试和构建"
-depends = ["check", "test", "build"]
+depends = ["check", "test", "build", "db:verify:empty"]

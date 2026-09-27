@@ -1,6 +1,6 @@
 # 建立 PostgreSQL 开发环境与版本化迁移
 
-Status: ready-for-agent
+Status: done
 
 ## 目标
 
@@ -29,3 +29,15 @@ Status: ready-for-agent
 - 依赖任务 01；完成后任务 04 可使用迁移结果实现认证。
 - 本任务不实现登录 API、密码重置或个人管理业务表。
 - 完成时记录空库准备、迁移、测试和故障诊断命令，以及实际验证环境。
+
+## 验收记录
+
+- 2026-09-27：在 macOS arm64、Docker Engine `29.4.0`、Docker Compose `5.1.2` 上，使用固定 digest 的 PostgreSQL `17.7-alpine`。`mise run db:start` 生成本地随机密码并启动容器，开发库与测试库分别为 `mindfolio_dev`、`mindfolio_test`。
+- `mise run db:verify:empty` 从临时空库创建管理者和 Session 表，重复迁移后仍只有一条成功迁移记录；预置冲突表时，迁移命令以“数据库迁移失败”返回非零。临时验证库已删除。
+- `mise run ci` 通过格式、Clippy、ESLint、类型、构建和测试。真实 PostgreSQL 集成测试验证唯一管理者约束、Session 外键与 token 唯一性、必要索引和就绪响应；开发库迁移由 `mise run db:migrate` 通过。
+- 启动 `mise run dev:api` 后，`/health/live` 与 `/health/ready` 均返回 200；执行 `mise run db:stop` 后，前者仍为 200，后者返回 503。API 已停止，数据库容器保持停止，数据卷保留。
+
+## 遗留问题与下一步
+
+- 本地与 CI 共用 `mise run ci` 入口；本次尚未取得包含这项改动的 GitHub Actions 运行结果，也未在目标 VPS 验证。Docker 容器仅在本机完成实际运行验收。
+- 后续按独立任务推进 03 OpenAPI 类型生成；04 管理者认证可在 03 完成后使用这里的表与迁移入口。首次初始化管理者、密码哈希和会话业务逻辑均属于 04。

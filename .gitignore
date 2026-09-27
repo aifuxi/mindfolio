@@ -12,6 +12,7 @@ mise.local.lock
 # 本地环境变量；示例文件可提交
 .env
 .env.*
+.env.db
 !.env.example
 !.env.*.example
 
