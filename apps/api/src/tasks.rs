@@ -1,0 +1,506 @@
+use axum::{
+    Json, Router,
+    extract::{
+        Path, Query, State,
+        rejection::{JsonRejection, QueryRejection},
+    },
+    http::StatusCode,
+    routing::get,
+};
+use serde::{Deserialize, Deserializer, Serialize};
+use sqlx::{FromRow, Postgres, Transaction, types::chrono::NaiveDate};
+use utoipa::ToSchema;
+
+use crate::{ApiError, ErrorCode, auth::PrivateState};
+
+type TaskFailure = (StatusCode, Json<ApiError>);
+
+pub(super) fn routes() -> Router<PrivateState> {
+    Router::new()
+        .route("/tasks", get(list).post(create))
+        .route("/tasks/{id}", get(detail).patch(update))
+}
+
+#[derive(Clone, Copy, Deserialize, Serialize, ToSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum TaskStatus {
+    Todo,
+    InProgress,
+    Completed,
+    Canceled,
+}
+
+impl TaskStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Todo => "todo",
+            Self::InProgress => "in_progress",
+            Self::Completed => "completed",
+            Self::Canceled => "canceled",
+        }
+    }
+
+    fn from_db(raw: &str) -> Self {
+        match raw {
+            "todo" => Self::Todo,
+            "in_progress" => Self::InProgress,
+            "completed" => Self::Completed,
+            "canceled" => Self::Canceled,
+            _ => unreachable!("数据库状态约束保证任务状态有效"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Deserialize, Serialize, ToSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum TaskPriority {
+    Low,
+    Medium,
+    High,
+    Urgent,
+}
+
+impl TaskPriority {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Urgent => "urgent",
+        }
+    }
+
+    fn from_db(raw: &str) -> Self {
+        match raw {
+            "low" => Self::Low,
+            "medium" => Self::Medium,
+            "high" => Self::High,
+            "urgent" => Self::Urgent,
+            _ => unreachable!("数据库约束保证任务优先级有效"),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, FromRow)]
+struct TaskRow {
+    id: i64,
+    project_id: Option<i64>,
+    title: String,
+    description: String,
+    status: String,
+    priority: Option<String>,
+    planned_date: Option<NaiveDate>,
+    due_date: Option<NaiveDate>,
+    in_backlog: bool,
+    version: i64,
+}
+
+#[derive(Serialize, ToSchema)]
+pub(super) struct TaskResponse {
+    id: String,
+    project_id: Option<String>,
+    title: String,
+    description: String,
+    status: TaskStatus,
+    priority: Option<TaskPriority>,
+    planned_date: Option<String>,
+    due_date: Option<String>,
+    in_backlog: bool,
+    version: i64,
+}
+
+impl From<TaskRow> for TaskResponse {
+    fn from(row: TaskRow) -> Self {
+        Self {
+            id: row.id.to_string(),
+            project_id: row.project_id.map(|id| id.to_string()),
+            title: row.title,
+            description: row.description,
+            status: TaskStatus::from_db(&row.status),
+            priority: row.priority.as_deref().map(TaskPriority::from_db),
+            planned_date: row.planned_date.map(|date| date.to_string()),
+            due_date: row.due_date.map(|date| date.to_string()),
+            in_backlog: row.in_backlog,
+            version: row.version,
+        }
+    }
+}
+
+#[derive(Serialize, ToSchema)]
+pub(super) struct TaskPage {
+    items: Vec<TaskResponse>,
+    page: i64,
+    has_more: bool,
+}
+
+#[derive(Deserialize)]
+pub(super) struct ListQuery {
+    scope: String,
+    project_id: Option<String>,
+    page: Option<i64>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub(super) struct CreateTask {
+    title: String,
+    project_id: Option<String>,
+    description: Option<String>,
+    status: Option<TaskStatus>,
+    priority: Option<TaskPriority>,
+    planned_date: Option<String>,
+    due_date: Option<String>,
+    in_backlog: Option<bool>,
+}
+
+fn present_nullable<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
+}
+
+#[derive(Deserialize, ToSchema)]
+pub(super) struct UpdateTask {
+    expected_version: i64,
+    title: Option<String>,
+    #[serde(default, deserialize_with = "present_nullable")]
+    project_id: Option<Option<String>>,
+    #[serde(default, deserialize_with = "present_nullable")]
+    description: Option<Option<String>>,
+    status: Option<TaskStatus>,
+    #[serde(default, deserialize_with = "present_nullable")]
+    priority: Option<Option<TaskPriority>>,
+    #[serde(default, deserialize_with = "present_nullable")]
+    planned_date: Option<Option<String>>,
+    #[serde(default, deserialize_with = "present_nullable")]
+    due_date: Option<Option<String>>,
+    in_backlog: Option<bool>,
+}
+
+fn failure(status: StatusCode, code: ErrorCode, message: &str) -> TaskFailure {
+    (
+        status,
+        Json(ApiError {
+            code,
+            message: message.into(),
+            request_id: uuid::Uuid::new_v4().to_string(),
+        }),
+    )
+}
+
+fn invalid(message: &str) -> TaskFailure {
+    failure(StatusCode::BAD_REQUEST, ErrorCode::InvalidRequest, message)
+}
+
+fn missing() -> TaskFailure {
+    failure(StatusCode::NOT_FOUND, ErrorCode::NotFound, "任务不存在")
+}
+
+fn unavailable() -> TaskFailure {
+    failure(
+        StatusCode::SERVICE_UNAVAILABLE,
+        ErrorCode::DatabaseUnavailable,
+        "数据库不可用",
+    )
+}
+
+fn parse_id(raw: &str) -> Result<i64, TaskFailure> {
+    raw.parse::<i64>()
+        .ok()
+        .filter(|id| *id > 0)
+        .ok_or_else(missing)
+}
+
+fn parse_project_id(raw: &str) -> Result<i64, TaskFailure> {
+    raw.parse::<i64>()
+        .ok()
+        .filter(|id| *id > 0)
+        .ok_or_else(|| invalid("项目 ID 无效"))
+}
+
+fn title(raw: &str) -> Result<String, TaskFailure> {
+    let value = raw.trim();
+    if value.is_empty() || value.chars().count() > 200 || value.chars().any(char::is_control) {
+        return Err(invalid("任务标题无效"));
+    }
+    Ok(value.into())
+}
+
+fn description(raw: String) -> Result<String, TaskFailure> {
+    if raw.chars().count() > 20_000 {
+        return Err(invalid("任务说明过长"));
+    }
+    Ok(raw)
+}
+
+fn date(raw: Option<String>) -> Result<Option<NaiveDate>, TaskFailure> {
+    match raw {
+        Some(raw) if raw.len() == 10 && raw.as_bytes()[4] == b'-' && raw.as_bytes()[7] == b'-' => {
+            NaiveDate::parse_from_str(&raw, "%Y-%m-%d")
+                .map(Some)
+                .map_err(|_| invalid("日期必须为 YYYY-MM-DD"))
+        }
+        Some(_) => Err(invalid("日期必须为 YYYY-MM-DD")),
+        None => Ok(None),
+    }
+}
+
+async fn project_name(
+    tx: &mut Transaction<'_, Postgres>,
+    id: i64,
+    require_active: bool,
+) -> Result<String, TaskFailure> {
+    let found: Option<(String, bool)> =
+        sqlx::query_as("SELECT name, archived_at IS NOT NULL FROM project WHERE id = $1 FOR SHARE")
+            .bind(id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(|_| unavailable())?;
+    match found {
+        Some((_, true)) if require_active => Err(failure(
+            StatusCode::CONFLICT,
+            ErrorCode::VersionConflict,
+            "项目已归档",
+        )),
+        Some((name, _)) => Ok(name),
+        None => Err(failure(
+            StatusCode::NOT_FOUND,
+            ErrorCode::NotFound,
+            "项目不存在",
+        )),
+    }
+}
+
+async fn record_completion(
+    tx: &mut Transaction<'_, Postgres>,
+    row: &TaskRow,
+) -> Result<(), TaskFailure> {
+    let project_name = match row.project_id {
+        Some(id) => Some(project_name(tx, id, false).await?),
+        None => None,
+    };
+    sqlx::query(
+        "INSERT INTO task_completion (task_id, task_title, project_name) VALUES ($1, $2, $3)",
+    )
+    .bind(row.id)
+    .bind(&row.title)
+    .bind(project_name)
+    .execute(&mut **tx)
+    .await
+    .map_err(|_| unavailable())?;
+    Ok(())
+}
+
+const FIELDS: &str = "id, project_id, title, description, status, priority, planned_date, due_date, in_backlog, version";
+
+#[utoipa::path(
+    get, path = "/tasks", operation_id = "list_tasks", security(("admin_session" = [])),
+    params(("scope" = String, Query, description = "inbox 或 project"), ("project_id" = Option<String>, Query), ("page" = Option<i64>, Query)),
+    responses((status = 200, body = TaskPage), (status = 400, body = ApiError), (status = 401, body = ApiError), (status = 404, body = ApiError), (status = 503, body = ApiError))
+)]
+pub(super) async fn list(
+    State(state): State<PrivateState>,
+    query: Result<Query<ListQuery>, QueryRejection>,
+) -> Result<Json<TaskPage>, TaskFailure> {
+    let Query(query) = query.map_err(|_| invalid("查询参数无效"))?;
+    let project_id = match (query.scope.as_str(), query.project_id.as_deref()) {
+        ("inbox", None) => None,
+        ("project", Some(id)) => Some(parse_project_id(id)?),
+        _ => return Err(invalid("任务范围无效")),
+    };
+    let page = query.page.unwrap_or(1);
+    if !(1..=100_000).contains(&page) {
+        return Err(invalid("页码无效"));
+    }
+    if let Some(id) = project_id {
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM project WHERE id = $1)")
+            .bind(id)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(|_| unavailable())?;
+        if !exists {
+            return Err(failure(
+                StatusCode::NOT_FOUND,
+                ErrorCode::NotFound,
+                "项目不存在",
+            ));
+        }
+    }
+    let statement = format!(
+        "SELECT {FIELDS} FROM task WHERE project_id IS NOT DISTINCT FROM $1::BIGINT ORDER BY created_at DESC, id DESC LIMIT 51 OFFSET $2"
+    );
+    let mut rows: Vec<TaskRow> = sqlx::query_as(&statement)
+        .bind(project_id)
+        .bind((page - 1) * 50)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|_| unavailable())?;
+    let has_more = rows.len() > 50;
+    rows.truncate(50);
+    Ok(Json(TaskPage {
+        items: rows.into_iter().map(Into::into).collect(),
+        page,
+        has_more,
+    }))
+}
+
+#[utoipa::path(
+    post, path = "/tasks", operation_id = "create_task", security(("admin_session" = [])),
+    params(("x-csrf-token" = String, Header)), request_body = CreateTask,
+    responses((status = 201, body = TaskResponse), (status = 400, body = ApiError), (status = 401, body = ApiError), (status = 403, body = ApiError), (status = 404, body = ApiError), (status = 409, body = ApiError), (status = 503, body = ApiError))
+)]
+pub(super) async fn create(
+    State(state): State<PrivateState>,
+    input: Result<Json<CreateTask>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskResponse>), TaskFailure> {
+    let Json(input) = input.map_err(|_| invalid("请求无效"))?;
+    let title = title(&input.title)?;
+    let description = description(input.description.unwrap_or_default())?;
+    let project_id = input
+        .project_id
+        .as_deref()
+        .map(parse_project_id)
+        .transpose()?;
+    let in_backlog = input.in_backlog.unwrap_or(false);
+    if in_backlog && project_id.is_none() {
+        return Err(invalid("收件箱任务不能进入待规划区"));
+    }
+    let planned_date = date(input.planned_date)?;
+    let due_date = date(input.due_date)?;
+    let status = input.status.unwrap_or(TaskStatus::Todo);
+    let mut tx = state.pool.begin().await.map_err(|_| unavailable())?;
+    if let Some(id) = project_id {
+        project_name(&mut tx, id, true).await?;
+    }
+    let statement = format!(
+        "INSERT INTO task (project_id, title, description, status, priority, planned_date, due_date, in_backlog) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING {FIELDS}"
+    );
+    let row: TaskRow = sqlx::query_as(&statement)
+        .bind(project_id)
+        .bind(title)
+        .bind(description)
+        .bind(status.as_str())
+        .bind(input.priority.map(TaskPriority::as_str))
+        .bind(planned_date)
+        .bind(due_date)
+        .bind(in_backlog)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| unavailable())?;
+    if status == TaskStatus::Completed {
+        record_completion(&mut tx, &row).await?;
+    }
+    tx.commit().await.map_err(|_| unavailable())?;
+    Ok((StatusCode::CREATED, Json(row.into())))
+}
+
+#[utoipa::path(
+    get, path = "/tasks/{id}", operation_id = "get_task", security(("admin_session" = [])), params(("id" = String, Path)),
+    responses((status = 200, body = TaskResponse), (status = 401, body = ApiError), (status = 404, body = ApiError), (status = 503, body = ApiError))
+)]
+pub(super) async fn detail(
+    State(state): State<PrivateState>,
+    Path(id): Path<String>,
+) -> Result<Json<TaskResponse>, TaskFailure> {
+    let id = parse_id(&id)?;
+    let statement = format!("SELECT {FIELDS} FROM task WHERE id = $1");
+    let row: Option<TaskRow> = sqlx::query_as(&statement)
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|_| unavailable())?;
+    row.map(|row| Json(row.into())).ok_or_else(missing)
+}
+
+#[utoipa::path(
+    patch, path = "/tasks/{id}", operation_id = "update_task", security(("admin_session" = [])),
+    description = "缺省字段保持原值；project_id、description、priority、planned_date、due_date 的 null 清空；title、status、in_backlog 的 null 与缺省等效。移动到收件箱时，若未指定 in_backlog，会自动离开待规划区。",
+    params(("id" = String, Path), ("x-csrf-token" = String, Header)), request_body = UpdateTask,
+    responses((status = 200, body = TaskResponse), (status = 400, body = ApiError), (status = 401, body = ApiError), (status = 403, body = ApiError), (status = 404, body = ApiError), (status = 409, body = ApiError), (status = 503, body = ApiError))
+)]
+pub(super) async fn update(
+    State(state): State<PrivateState>,
+    Path(id): Path<String>,
+    input: Result<Json<UpdateTask>, JsonRejection>,
+) -> Result<Json<TaskResponse>, TaskFailure> {
+    let id = parse_id(&id)?;
+    let Json(input) = input.map_err(|_| invalid("请求无效"))?;
+    if input.expected_version < 1 {
+        return Err(invalid("版本无效"));
+    }
+    let mut tx = state.pool.begin().await.map_err(|_| unavailable())?;
+    let statement = format!("SELECT {FIELDS} FROM task WHERE id = $1 FOR UPDATE");
+    let mut row: TaskRow = sqlx::query_as(&statement)
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|_| unavailable())?
+        .ok_or_else(missing)?;
+    if row.version != input.expected_version {
+        return Err(failure(
+            StatusCode::CONFLICT,
+            ErrorCode::VersionConflict,
+            "任务已变更，请刷新后重试",
+        ));
+    }
+    let previous = row.clone();
+    if let Some(value) = input.title {
+        row.title = title(&value)?;
+    }
+    if let Some(value) = input.description {
+        row.description = description(value.unwrap_or_default())?;
+    }
+    if let Some(value) = input.project_id {
+        row.project_id = value.as_deref().map(parse_project_id).transpose()?;
+        if let Some(project_id) = row.project_id {
+            project_name(&mut tx, project_id, true).await?;
+        } else if input.in_backlog.is_none() {
+            row.in_backlog = false;
+        }
+    }
+    if let Some(value) = input.status {
+        row.status = value.as_str().into();
+    }
+    if let Some(value) = input.priority {
+        row.priority = value.map(|priority| priority.as_str().into());
+    }
+    if let Some(value) = input.planned_date {
+        row.planned_date = date(value)?;
+    }
+    if let Some(value) = input.due_date {
+        row.due_date = date(value)?;
+    }
+    if let Some(value) = input.in_backlog {
+        row.in_backlog = value;
+    }
+    if row.project_id.is_none() && row.in_backlog {
+        return Err(invalid("收件箱任务不能进入待规划区"));
+    }
+    if row == previous {
+        return Ok(Json(row.into()));
+    }
+    let newly_completed = previous.status != "completed" && row.status == "completed";
+    let statement = format!(
+        "UPDATE task SET project_id = $1, title = $2, description = $3, status = $4, priority = $5, planned_date = $6, due_date = $7, in_backlog = $8, version = version + 1, updated_at = now() WHERE id = $9 AND version = $10 RETURNING {FIELDS}"
+    );
+    let saved: TaskRow = sqlx::query_as(&statement)
+        .bind(row.project_id)
+        .bind(&row.title)
+        .bind(&row.description)
+        .bind(&row.status)
+        .bind(&row.priority)
+        .bind(row.planned_date)
+        .bind(row.due_date)
+        .bind(row.in_backlog)
+        .bind(id)
+        .bind(input.expected_version)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| unavailable())?;
+    if newly_completed {
+        record_completion(&mut tx, &saved).await?;
+    }
+    tx.commit().await.map_err(|_| unavailable())?;
+    Ok(Json(saved.into()))
+}

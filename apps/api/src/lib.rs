@@ -7,6 +7,7 @@ use utoipa::{OpenApi, ToSchema};
 
 mod auth;
 mod projects;
+mod tasks;
 pub use auth::{AuthConfig, initialize_admin, reset_admin};
 
 #[derive(Serialize, ToSchema)]
@@ -43,8 +44,8 @@ enum ErrorCode {
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(live, ready, auth::login, auth::session, auth::logout, projects::list, projects::create, projects::detail, projects::rename, projects::complete, projects::archive, projects::restore),
-    components(schemas(HealthStatus, HealthState, ApiError, ErrorCode, auth::LoginRequest, auth::SessionResponse, projects::ProjectResponse, projects::ProjectPage, projects::CreateProject, projects::RenameProject, projects::VersionRequest)),
+    paths(live, ready, auth::login, auth::session, auth::logout, projects::list, projects::create, projects::detail, projects::rename, projects::complete, projects::archive, projects::restore, tasks::list, tasks::create, tasks::detail, tasks::update),
+    components(schemas(HealthStatus, HealthState, ApiError, ErrorCode, auth::LoginRequest, auth::SessionResponse, projects::ProjectResponse, projects::ProjectPage, projects::CreateProject, projects::RenameProject, projects::VersionRequest, tasks::TaskStatus, tasks::TaskPriority, tasks::TaskResponse, tasks::TaskPage, tasks::CreateTask, tasks::UpdateTask)),
     servers((url = "/api"))
 )]
 struct ApiDoc;
@@ -118,7 +119,7 @@ pub fn app_with_config(pool: PgPool, config: AuthConfig) -> Router {
         .route("/health/live", get(live))
         .route("/health/ready", get(ready))
         .merge(auth::protect(
-            projects::routes(),
+            projects::routes().merge(tasks::routes()),
             pool.clone(),
             config.clone(),
         ))

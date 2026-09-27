@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button } from "@aifuxi/semi-ui-vue/button";
 import { onMounted, onUnmounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 import { currentSession, refreshSession, signOut } from "../auth";
 import {
   ProjectRequestError,
@@ -190,6 +190,9 @@ async function logout() {
           </div>
         </form>
       </section>
+      <RouterLink class="inbox-link" :to="{ name: 'tasks' }"
+        >打开收件箱与任务 →</RouterLink
+      >
       <section class="list-section" aria-labelledby="list-title">
         <div class="section-heading">
           <div>
@@ -265,6 +268,10 @@ async function logout() {
               </form>
             </div>
             <div class="actions">
+              <RouterLink
+                :to="{ name: 'tasks', query: { project_id: project.id } }"
+                >查看任务</RouterLink
+              >
               <Button
                 v-if="!project.archived_at"
                 theme="borderless"
@@ -344,6 +351,21 @@ async function logout() {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+.inbox-link {
+  display: inline-block;
+  margin-top: 1.5rem;
+  color: #354f9b;
+  font-weight: 600;
+}
+.actions a {
+  color: #354f9b;
+  font-weight: 600;
+  text-decoration: none;
+}
+.actions a:hover,
+.inbox-link:hover {
+  text-decoration: underline;
 }
 .topbar,
 .section-heading,

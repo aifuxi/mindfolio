@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { refreshSession } from "./auth";
 import HomeView from "./views/HomeView.vue";
 import LoginView from "./views/LoginView.vue";
+import TasksView from "./views/TasksView.vue";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -11,6 +12,12 @@ export const router = createRouter({
       path: "/",
       name: "home",
       component: HomeView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/tasks",
+      name: "tasks",
+      component: TasksView,
       meta: { requiresAuth: true },
     },
   ],
