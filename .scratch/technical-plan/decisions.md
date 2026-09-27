@@ -114,7 +114,7 @@ Rust 接入优先验证 `aws-sdk-s3`，其官方文档支持[自定义 Endpoint]
 
 ## 已确认的代码与镜像发布
 
-使用 GitHub 托管代码，由 GitHub Actions 执行检查并构建带版本标识的 Docker 镜像，推送 GHCR；管理者再通过 Portainer 手动选择版本部署，生产 VPS 运行已构建的服务。发布记录保留提交、版本与镜像 digest 的对应关系，便于追溯；数据库结构变更的兼容与恢复步骤随版本明确，镜像切换不代表自动回滚数据。仓库与镜像的可见性、实际远端地址，以及服务器拉取镜像的连通性和凭据在接入时确定。参考 [GitHub 镜像发布工作流](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images)。
+使用 GitHub 托管代码，仓库远端为 `git@github.com:aifuxi/mindfolio.git`。由 GitHub Actions 执行检查并构建带版本标识的 Docker 镜像，推送 GHCR；管理者再通过 Portainer 手动选择版本部署，生产 VPS 运行已构建的服务。发布记录保留提交、版本与镜像 digest 的对应关系，便于追溯；数据库结构变更的兼容与恢复步骤随版本明确，镜像切换不代表自动回滚数据。仓库与镜像的可见性，以及服务器拉取镜像的连通性和凭据在接入时确定。参考 [GitHub 镜像发布工作流](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images)。
 
 ## 已确认的统一工具链与质量检查
 

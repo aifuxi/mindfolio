@@ -1,6 +1,6 @@
 # 任务跟踪
 
-本项目暂时使用仓库内的 Markdown 文件记录规格与任务，目录为 `.scratch/`。建立 Git 远程仓库并决定使用 GitHub Issues 等服务后，再更新本文件。
+本项目已有 GitHub 远端，当前仍使用仓库内的 Markdown 文件记录规格与任务，目录为 `.scratch/`。若管理者决定改用 GitHub Issues 等服务，再更新本文件与任务记录方式。
 
 ## 文件约定
 
