@@ -187,6 +187,7 @@ async function logout() {
           >
         </div>
       </header>
+      <RouterLink class="inbox-link" to="/today">今日任务</RouterLink>
       <RouterLink class="inbox-link" to="/history">查看完成历史</RouterLink>
       <section class="card create-card" aria-labelledby="create-title">
         <div>

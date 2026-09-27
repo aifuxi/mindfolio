@@ -12,6 +12,7 @@ import {
   getTask,
   listSubtasks,
   listTasks,
+  planTaskToday,
   updateTask,
   type Task,
   type TaskFilters,
@@ -197,10 +198,11 @@ async function loadTasks() {
 onMounted(() => {
   void loadProjects();
   void loadTasks();
+  void openTaskFromRoute();
 });
 
 watch(
-  () => route.query.project_id,
+  () => [route.query.project_id, route.query.task_id],
   () => {
     page.value = 1;
     editingTask.value = null;
@@ -209,6 +211,7 @@ watch(
     createForm.project_id = selectedProjectId.value;
     createForm.in_backlog = false;
     void loadTasks();
+    void openTaskFromRoute();
   },
 );
 
@@ -289,6 +292,16 @@ async function beginEdit(task: Task) {
     } catch (cause) {
       handleError(cause);
     }
+  }
+}
+
+async function openTaskFromRoute() {
+  const id = route.query.task_id;
+  if (typeof id !== "string" || !id) return;
+  try {
+    await beginEdit(await getTask(id));
+  } catch (cause) {
+    handleError(cause);
   }
 }
 
@@ -406,6 +419,22 @@ async function confirmDeleteTask() {
     busy.value = false;
   }
 }
+
+async function scheduleToday(task: Task) {
+  if (busy.value || editingTask.value?.id === task.id) return;
+  busy.value = true;
+  error.value = "";
+  notice.value = "";
+  try {
+    const saved = await planTaskToday(task);
+    await loadTasks();
+    notice.value = `已安排到 ${saved.planned_date}`;
+  } catch (cause) {
+    handleError(cause);
+  } finally {
+    busy.value = false;
+  }
+}
 </script>
 
 <template>
@@ -418,6 +447,7 @@ async function confirmDeleteTask() {
           <p class="subtle">已登录：{{ currentSession?.username }}</p>
         </div>
         <nav class="scope">
+          <RouterLink to="/today">今日任务</RouterLink>
           <RouterLink to="/history">完成历史</RouterLink>
           <RouterLink to="/">返回项目</RouterLink>
         </nav>
@@ -675,7 +705,16 @@ async function confirmDeleteTask() {
                 ><span v-for="tag in task.tags" :key="tag">#{{ tag }}</span>
               </div>
             </div>
-            <Button theme="borderless" @click="beginEdit(task)">编辑</Button>
+            <div class="task-actions">
+              <Button
+                v-if="task.status === 'todo' || task.status === 'in_progress'"
+                theme="borderless"
+                :disabled="busy || editingTask?.id === task.id"
+                @click="scheduleToday(task)"
+                >安排到今天</Button
+              >
+              <Button theme="borderless" @click="beginEdit(task)">编辑</Button>
+            </div>
           </li>
         </ul>
         <div v-else class="board" aria-label="任务看板">
@@ -709,9 +748,20 @@ async function confirmDeleteTask() {
                     <span v-for="tag in task.tags" :key="tag">#{{ tag }}</span>
                   </div>
                 </div>
-                <Button theme="borderless" @click="beginEdit(task)"
-                  >编辑</Button
-                >
+                <div class="task-actions">
+                  <Button
+                    v-if="
+                      task.status === 'todo' || task.status === 'in_progress'
+                    "
+                    theme="borderless"
+                    :disabled="busy || editingTask?.id === task.id"
+                    @click="scheduleToday(task)"
+                    >安排到今天</Button
+                  >
+                  <Button theme="borderless" @click="beginEdit(task)"
+                    >编辑</Button
+                  >
+                </div>
               </li>
             </ul>
           </section>
@@ -1218,6 +1268,12 @@ select:focus-visible {
 .task-card {
   padding: 1.2rem 1.5rem;
   align-items: flex-start;
+}
+.task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.25rem;
 }
 .task-main {
   min-width: 0;

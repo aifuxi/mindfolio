@@ -4,6 +4,7 @@ import HomeView from "./views/HomeView.vue";
 import HistoryView from "./views/HistoryView.vue";
 import LoginView from "./views/LoginView.vue";
 import TasksView from "./views/TasksView.vue";
+import TodayView from "./views/TodayView.vue";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -25,6 +26,12 @@ export const router = createRouter({
       path: "/history",
       name: "history",
       component: HistoryView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/today",
+      name: "today",
+      component: TodayView,
       meta: { requiresAuth: true },
     },
   ],

@@ -7,6 +7,7 @@ export type TaskStatus = components["schemas"]["TaskStatus"];
 export type TaskPriority = components["schemas"]["TaskPriority"];
 export type CreateTask = components["schemas"]["CreateTask"];
 export type UpdateTask = components["schemas"]["UpdateTask"];
+export type TodayTask = components["schemas"]["TodayTaskResponse"];
 export type TaskFilters = {
   keyword?: string;
   status?: TaskStatus;
@@ -122,4 +123,22 @@ export async function deleteTask(task: Task) {
       response.status,
     );
   }
+}
+
+export async function listTodayTasks(page: number) {
+  const { data, error, response } = await client.GET("/today/tasks", {
+    params: { query: { page } },
+  });
+  return result(response, data, error);
+}
+
+export async function planTaskToday(task: Task) {
+  const { data, error, response } = await client.POST(
+    "/tasks/{id}/plan-today",
+    {
+      params: { path: { id: task.id }, header: { "x-csrf-token": csrf() } },
+      body: { expected_version: task.version },
+    },
+  );
+  return result(response, data, error);
 }

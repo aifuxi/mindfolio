@@ -230,6 +230,23 @@ export interface paths {
         patch: operations["update_task"];
         trace?: never;
     };
+    "/tasks/{id}/plan-today": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 按服务端 Asia/Shanghai 今日设置计划日期；截止日期和完成记录不变。 */
+        post: operations["plan_task_today"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/{id}/subtasks": {
         parameters: {
             query?: never;
@@ -238,6 +255,23 @@ export interface paths {
             cookie?: never;
         };
         get: operations["list_subtasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/today/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 服务端按 Asia/Shanghai 计算今天；返回计划今天、今天到期或已逾期的待办与进行中任务，按逾期、今天到期、计划今天排序。 */
+        get: operations["list_today_tasks"];
         put?: never;
         post?: never;
         delete?: never;
@@ -310,6 +344,10 @@ export interface components {
             password: string;
             username: string;
         };
+        PlanTodayRequest: {
+            /** Format: int64 */
+            expected_version: number;
+        };
         ProjectPage: {
             has_more: boolean;
             items: components["schemas"]["ProjectResponse"][];
@@ -358,6 +396,19 @@ export interface components {
         };
         /** @enum {string} */
         TaskStatus: "todo" | "in_progress" | "completed" | "canceled";
+        /** @enum {string} */
+        TodayReason: "overdue" | "due_today" | "planned_today";
+        TodayTaskPage: {
+            business_date: string;
+            has_more: boolean;
+            items: components["schemas"]["TodayTaskResponse"][];
+            /** Format: int64 */
+            page: number;
+        };
+        TodayTaskResponse: {
+            reasons: components["schemas"]["TodayReason"][];
+            task: components["schemas"]["TaskResponse"];
+        };
         UpdateTask: {
             description?: string | null;
             due_date?: string | null;
@@ -1536,6 +1587,81 @@ export interface operations {
             };
         };
     };
+    plan_task_today: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-csrf-token": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanTodayRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponse"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     list_subtasks: {
         parameters: {
             query?: {
@@ -1580,6 +1706,51 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    list_today_tasks: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TodayTaskPage"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

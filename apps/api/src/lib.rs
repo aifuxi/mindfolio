@@ -10,6 +10,7 @@ mod completions;
 mod projects;
 mod tasks;
 pub use auth::{AuthConfig, initialize_admin, reset_admin};
+pub use tasks::TodayClock;
 
 #[derive(Serialize, ToSchema)]
 struct HealthStatus {
@@ -45,8 +46,8 @@ enum ErrorCode {
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(live, ready, auth::login, auth::session, auth::logout, projects::list, projects::create, projects::detail, projects::rename, projects::complete, projects::archive, projects::restore, projects::delete, tasks::list, tasks::list_subtasks, tasks::create, tasks::detail, tasks::update, tasks::delete, completions::list, completions::days),
-    components(schemas(HealthStatus, HealthState, ApiError, ErrorCode, auth::LoginRequest, auth::SessionResponse, projects::ProjectResponse, projects::ProjectPage, projects::CreateProject, projects::RenameProject, projects::VersionRequest, tasks::TaskStatus, tasks::TaskPriority, tasks::TaskResponse, tasks::TaskPage, tasks::CreateTask, tasks::UpdateTask, tasks::DeleteTask, completions::CompletionResponse, completions::CompletionPage, completions::DaySummary, completions::DayPage)),
+    paths(live, ready, auth::login, auth::session, auth::logout, projects::list, projects::create, projects::detail, projects::rename, projects::complete, projects::archive, projects::restore, projects::delete, tasks::list, tasks::list_subtasks, tasks::create, tasks::detail, tasks::update, tasks::delete, tasks::today::today_tasks, tasks::today::plan_today, completions::list, completions::days),
+    components(schemas(HealthStatus, HealthState, ApiError, ErrorCode, auth::LoginRequest, auth::SessionResponse, projects::ProjectResponse, projects::ProjectPage, projects::CreateProject, projects::RenameProject, projects::VersionRequest, tasks::TaskStatus, tasks::TaskPriority, tasks::TaskResponse, tasks::TaskPage, tasks::CreateTask, tasks::UpdateTask, tasks::DeleteTask, tasks::today::TodayReason, tasks::today::TodayTaskResponse, tasks::today::TodayTaskPage, tasks::today::PlanTodayRequest, completions::CompletionResponse, completions::CompletionPage, completions::DaySummary, completions::DayPage)),
     servers((url = "/api"))
 )]
 struct ApiDoc;
@@ -116,12 +117,21 @@ pub fn app(pool: PgPool) -> Router {
 }
 
 pub fn app_with_config(pool: PgPool, config: AuthConfig) -> Router {
+    app_with_config_and_today_clock(pool, config, TodayClock::system())
+}
+
+pub fn app_with_config_and_today_clock(
+    pool: PgPool,
+    config: AuthConfig,
+    clock: TodayClock,
+) -> Router {
     Router::new()
         .route("/health/live", get(live))
         .route("/health/ready", get(ready))
         .merge(auth::protect(
             projects::routes()
                 .merge(tasks::routes())
+                .merge(tasks::today_routes(clock))
                 .merge(completions::routes()),
             pool.clone(),
             config.clone(),

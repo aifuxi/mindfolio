@@ -13,6 +13,10 @@ use utoipa::ToSchema;
 
 use crate::{ApiError, ErrorCode, auth::PrivateState};
 
+pub(crate) mod today;
+pub use today::TodayClock;
+pub(super) use today::today_routes;
+
 type TaskFailure = (StatusCode, Json<ApiError>);
 
 pub(super) fn routes() -> Router<PrivateState> {
@@ -83,19 +87,19 @@ impl TaskPriority {
 }
 
 #[derive(Clone, PartialEq, FromRow)]
-struct TaskRow {
-    id: i64,
+pub(super) struct TaskRow {
+    pub(super) id: i64,
     parent_id: Option<i64>,
-    project_id: Option<i64>,
+    pub(super) project_id: Option<i64>,
     title: String,
     description: String,
-    status: String,
+    pub(super) status: String,
     priority: Option<String>,
-    planned_date: Option<NaiveDate>,
-    due_date: Option<NaiveDate>,
+    pub(super) planned_date: Option<NaiveDate>,
+    pub(super) due_date: Option<NaiveDate>,
     in_backlog: bool,
     tags: Vec<String>,
-    version: i64,
+    pub(super) version: i64,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -477,7 +481,7 @@ async fn record_completion(
     Ok(())
 }
 
-const FIELDS: &str = "id, parent_id, project_id, title, description, status, priority, planned_date, due_date, in_backlog, ARRAY(SELECT tag.name FROM task_tag AS tag JOIN task_tag_link AS link ON link.tag_id = tag.id WHERE link.task_id = task.id ORDER BY lower(tag.name), tag.name) AS tags, version";
+pub(super) const FIELDS: &str = "id, parent_id, project_id, title, description, status, priority, planned_date, due_date, in_backlog, ARRAY(SELECT tag.name FROM task_tag AS tag JOIN task_tag_link AS link ON link.tag_id = tag.id WHERE link.task_id = task.id ORDER BY lower(tag.name), tag.name) AS tags, version";
 
 async fn search_tasks(
     pool: &PgPool,
