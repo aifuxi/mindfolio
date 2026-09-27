@@ -36,8 +36,9 @@ Status: done
 - `mise run db:verify:empty` 从临时空库创建管理者和 Session 表，重复迁移后仍只有一条成功迁移记录；预置冲突表时，迁移命令以“数据库迁移失败”返回非零。临时验证库已删除。
 - `mise run ci` 通过格式、Clippy、ESLint、类型、构建和测试。真实 PostgreSQL 集成测试验证唯一管理者约束、Session 外键与 token 唯一性、必要索引和就绪响应；开发库迁移由 `mise run db:migrate` 通过。
 - 启动 `mise run dev:api` 后，`/health/live` 与 `/health/ready` 均返回 200；执行 `mise run db:stop` 后，前者仍为 200，后者返回 503。API 已停止，数据库容器保持停止，数据卷保留。
+- [GitHub Actions Ubuntu Linux x64 检查](https://github.com/aifuxi/mindfolio/actions/runs/36318947493)通过，`mise run ci` 包含空库迁移、冲突失败验证和真实数据库测试。
 
 ## 遗留问题与下一步
 
-- 本地与 CI 共用 `mise run ci` 入口；本次尚未取得包含这项改动的 GitHub Actions 运行结果，也未在目标 VPS 验证。Docker 容器仅在本机完成实际运行验收。
+- 已验证 macOS arm64 与 GitHub Actions Ubuntu Linux x64；尚未在目标 VPS 验证。Docker 容器仅在本机完成实际运行和断库验收。
 - 后续按独立任务推进 03 OpenAPI 类型生成；04 管理者认证可在 03 完成后使用这里的表与迁移入口。首次初始化管理者、密码哈希和会话业务逻辑均属于 04。
