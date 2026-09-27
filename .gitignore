@@ -6,6 +6,8 @@ Thumbs.db
 mise.local.toml
 mise.local.lock
 .codegraph/
+# 本机 Codex MCP 连接配置
+.codex/config.toml
 *.swp
 *.swo
 
