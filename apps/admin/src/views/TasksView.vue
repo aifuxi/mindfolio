@@ -3,6 +3,7 @@ import { Button } from "@aifuxi/semi-ui-vue/button";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { currentSession } from "../auth";
+import { MarkdownPreview } from "../markdown";
 import { ProjectRequestError, listProjects, type Project } from "../projects";
 import {
   TaskRequestError,
@@ -42,6 +43,8 @@ const notice = ref("");
 const editingTask = ref<Task | null>(null);
 const subtasks = ref<Task[]>([]);
 const pendingCompletion = ref(false);
+const createPreview = ref(false);
+const editPreview = ref(false);
 const childForm = reactive({
   title: "",
   status: "todo" as TaskStatus,
@@ -215,6 +218,7 @@ async function selectScope(event: Event) {
 function clearCreate() {
   createForm.title = "";
   createForm.description = "";
+  createPreview.value = false;
   createForm.status = "todo";
   createForm.priority = "";
   createForm.planned_date = "";
@@ -267,6 +271,7 @@ async function beginEdit(task: Task) {
   pendingCompletion.value = false;
   editForm.title = task.title;
   editForm.description = task.description;
+  editPreview.value = false;
   editForm.project_id = task.project_id ?? "";
   editForm.status = task.status;
   editForm.priority = task.priority ?? "";
@@ -412,6 +417,20 @@ async function saveEdit(confirmed = false) {
             v-model="createForm.description"
             maxlength="20000"
             rows="3"
+          />
+          <div>
+            <Button
+              html-type="button"
+              theme="borderless"
+              @click="createPreview = !createPreview"
+            >
+              {{ createPreview ? "隐藏说明预览" : "预览说明" }}
+            </Button>
+          </div>
+          <MarkdownPreview
+            v-if="createPreview"
+            :source="createForm.description"
+            label="新建任务说明预览"
           />
           <div class="fields">
             <div>
@@ -730,6 +749,20 @@ async function saveEdit(confirmed = false) {
             maxlength="20000"
             rows="5"
           />
+          <div>
+            <Button
+              html-type="button"
+              theme="borderless"
+              @click="editPreview = !editPreview"
+            >
+              {{ editPreview ? "隐藏说明预览" : "预览说明" }}
+            </Button>
+          </div>
+          <MarkdownPreview
+            v-if="editPreview"
+            :source="editForm.description"
+            label="编辑任务说明预览"
+          />
           <div class="fields">
             <div>
               <label for="edit-project">归属</label
@@ -974,6 +1007,47 @@ a {
 .form {
   display: grid;
   gap: 0.6rem;
+}
+.markdown-preview {
+  border: 1px solid #d8dee8;
+  border-radius: 0.5rem;
+  background: #fafbfd;
+  padding: 0.9rem 1rem;
+  min-height: 3rem;
+  overflow-wrap: anywhere;
+}
+.markdown-preview :deep(:first-child) {
+  margin-top: 0;
+}
+.markdown-preview :deep(:last-child) {
+  margin-bottom: 0;
+}
+.markdown-preview :deep(ul),
+.markdown-preview :deep(ol) {
+  padding-left: 1.5rem;
+}
+.markdown-preview :deep(pre) {
+  overflow-x: auto;
+  border-radius: 0.4rem;
+  background: #e9edf4;
+  padding: 0.8rem;
+}
+.markdown-preview :deep(code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.markdown-preview :deep(:not(pre) > code) {
+  background: #e9edf4;
+  border-radius: 0.2rem;
+  padding: 0.1rem 0.25rem;
+}
+.markdown-preview :deep(blockquote) {
+  border-left: 3px solid #9baac0;
+  margin-left: 0;
+  padding-left: 1rem;
+  color: #4f5968;
+}
+.markdown-preview :deep(.markdown-image-alt) {
+  color: #626c7a;
 }
 label {
   font-weight: 600;

@@ -426,3 +426,184 @@ test("项目列表和看板共用筛选结果且切换不写入任务", async ({
   ).toBeVisible();
   expect(writes).toBe(0);
 });
+
+test("Markdown 说明预览阻止危险内容并保留原文与冲突输入", async ({ page }) => {
+  let active = false;
+  let conflict = false;
+  let remoteLoads = 0;
+  type MockTask = {
+    id: string;
+    parent_id: string | null;
+    project_id: string | null;
+    title: string;
+    description: string;
+    status: string;
+    priority: null;
+    planned_date: null;
+    due_date: null;
+    in_backlog: boolean;
+    tags: string[];
+    version: number;
+  };
+  let stored: MockTask | null = null;
+  await page.route(/https:\/\/images\.invalid\//, async (route) => {
+    remoteLoads++;
+    await route.fulfill({ status: 204 });
+  });
+  await page.route("**/api/auth/**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/auth/login")
+      active = true;
+    await route.fulfill({
+      status: active ? 200 : 401,
+      contentType: "application/json",
+      body: JSON.stringify(
+        active
+          ? { username: "owner", csrf_token: "csrf-test" }
+          : { code: "unauthorized", message: "请先登录", request_id: "test" },
+      ),
+    });
+  });
+  await page.route(/\/api\/projects(?:\/|\?|$)/, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ items: [], page: 1, has_more: false }),
+    }),
+  );
+  await page.route(/\/api\/tasks(?:\/|\?|$)/, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path.endsWith("/subtasks")) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ items: [], page: 1, has_more: false }),
+      });
+      return;
+    }
+    if (request.method() === "POST") {
+      const input = request.postDataJSON();
+      stored = {
+        id: "9007199254740993",
+        parent_id: null,
+        project_id: null,
+        title: input.title,
+        description: input.description,
+        status: "todo",
+        priority: null,
+        planned_date: null,
+        due_date: null,
+        in_backlog: false,
+        tags: [],
+        version: 1,
+      };
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify(stored),
+      });
+      return;
+    }
+    if (request.method() === "PATCH") {
+      if (conflict) {
+        await route.fulfill({
+          status: 409,
+          contentType: "application/json",
+          body: JSON.stringify({
+            code: "version_conflict",
+            message: "任务已变更",
+            request_id: "test",
+          }),
+        });
+        return;
+      }
+      Object.assign(stored!, request.postDataJSON(), {
+        version: stored!.version + 1,
+      });
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(stored),
+      });
+      return;
+    }
+    if (path.endsWith("/9007199254740993")) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(stored),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: stored ? [stored] : [],
+        page: 1,
+        has_more: false,
+      }),
+    });
+  });
+
+  const source = [
+    "- 第一项",
+    "- 第二项",
+    "",
+    "```rust",
+    "let value = 1;",
+    "```",
+    "",
+    "[安全链接](/#safe)",
+    "[危险链接](javascript:alert(1))",
+    "[数据链接](data:text/html,unsafe)",
+    "![远程图片](https://images.invalid/tracker.png)",
+    "<script>window.previewRan = true</script>",
+    '<img src="https://images.invalid/html.png" onerror="window.previewRan=true">',
+  ].join("\n");
+  await page.goto("/");
+  await page.getByLabel("账号").fill("owner");
+  await page.getByLabel("密码").fill("correct horse battery staple");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await page.getByRole("link", { name: "打开收件箱与任务" }).click();
+  await page.getByLabel("标题", { exact: true }).fill("Markdown 任务");
+  await page.getByLabel("说明（Markdown 原文）").first().fill(source);
+  await page.getByRole("button", { name: "预览说明" }).click();
+  const preview = page.getByRole("region", { name: "新建任务说明预览" });
+  await expect(preview.locator("ul > li")).toHaveCount(2);
+  await expect(preview.locator("pre code")).toHaveText("let value = 1;");
+  await expect(preview.locator("script, img")).toHaveCount(0);
+  await expect(preview.getByRole("link", { name: "危险链接" })).toHaveCount(0);
+  await expect(preview.getByRole("link", { name: "数据链接" })).toHaveCount(0);
+  await expect(preview).toContainText("[图片：远程图片]");
+  const safeLink = preview.getByRole("link", { name: "安全链接" });
+  await expect(safeLink).toHaveAttribute("rel", "noopener noreferrer");
+  await expect(safeLink).toHaveAttribute("target", "_blank");
+  const popupPromise = page.waitForEvent("popup");
+  await safeLink.click();
+  const popup = await popupPromise;
+  expect(await popup.evaluate(() => window.opener === null)).toBe(true);
+  await popup.close();
+  expect(remoteLoads).toBe(0);
+  expect(
+    await page.evaluate(
+      () => (window as typeof window & { previewRan?: boolean }).previewRan,
+    ),
+  ).not.toBe(true);
+
+  await page.getByRole("button", { name: "创建任务" }).click();
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await expect(page.locator("#edit-description")).toHaveValue(source);
+  await page.getByRole("button", { name: "预览说明" }).last().click();
+  await expect(
+    page.getByRole("region", { name: "编辑任务说明预览" }).locator("pre code"),
+  ).toHaveText("let value = 1;");
+  const changed = `${source}\n\n补充说明`;
+  await page.locator("#edit-description").fill(changed);
+  await page.getByRole("button", { name: "保存任务" }).click();
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await expect(page.locator("#edit-description")).toHaveValue(changed);
+  const unsaved = `${changed}\n\n未提交的修改`;
+  await page.locator("#edit-description").fill(unsaved);
+  conflict = true;
+  await page.getByRole("button", { name: "保存任务" }).click();
+  await expect(page.getByRole("alert")).toContainText("任务已变更");
+  await expect(page.locator("#edit-description")).toHaveValue(unsaved);
+  expect(stored?.description).toBe(changed);
+  expect(remoteLoads).toBe(0);
+});

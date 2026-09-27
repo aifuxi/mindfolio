@@ -1,6 +1,6 @@
 # 实现任务说明的 Markdown 编辑与安全预览
 
-Status: planned
+Status: done
 
 ## 目标
 
@@ -26,3 +26,10 @@ Status: planned
 
 - 依赖任务 04；复用既有任务说明字段，不建立附件上传或富文本编辑器。
 - 完成后记录危险输入与正文保留的验收结果，并单独提交。
+
+## 验收记录
+
+- 2026-09-27：管理端任务创建与编辑表单增加即时 Markdown 预览。使用锁定的 `markdown-it` 解析普通列表、链接和代码片段，再将允许的 token 渲染为 Vue 节点；不插入解析器生成的 HTML。服务端继续只保存说明原文，没有增加第二份正文。
+- 解析器禁用原始 HTML；渲染层仅使用允许的结构标签并再次校验链接协议，只允许 HTTP、HTTPS、邮件及安全相对链接。图片语法仅显示替代文字，不创建图片元素；新窗口链接设置 `noopener noreferrer`。
+- 真实 PostgreSQL HTTP 测试确认 Markdown 原文创建、修改和重新读取一致，未登录读取、错误 CSRF 与来源被拒绝，旧版本写入返回 409 且不覆盖已保存正文。Chromium 流程确认列表与代码显示、保存后再次打开、冲突时保留未提交文字；危险 HTML、脚本和 `data:` 链接不执行，远程图片无请求，新窗口的 `opener` 为空。
+- `mise run ci` 通过：格式、Clippy、ESLint、Vue 类型、契约漂移、空库与重复迁移、真实 PostgreSQL HTTP 测试、Chromium 浏览器测试和构建。

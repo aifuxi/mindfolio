@@ -1220,3 +1220,91 @@ async fn 任务筛选分页限制和稳定顺序(pool: PgPool) {
         assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
     }
 }
+
+#[sqlx::test]
+async fn 任务说明原文保存重新读取与冲突边界(pool: PgPool) {
+    let (app, cookie, csrf) = session(&pool).await;
+    let original = "- 列表一\n- 列表二\n\n```rust\nlet x = 1;\n```\n\n<img src=\"https://example.invalid/a.png\">";
+    let created = write(
+        &app,
+        "POST",
+        "/tasks",
+        &cookie,
+        &csrf,
+        json!({"title":"Markdown 任务", "description":original}),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created = json_body(created).await;
+    let id = created["id"].as_str().unwrap().to_string();
+    assert_eq!(created["description"], original);
+    let reloaded = send(
+        &app,
+        "GET",
+        &format!("/tasks/{id}"),
+        None,
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(json_body(reloaded).await["description"], original);
+    let private = send(&app, "GET", &format!("/tasks/{id}"), None, None, None, None).await;
+    assert_eq!(private.status(), StatusCode::UNAUTHORIZED);
+
+    let edited = "# 新说明\n\n[安全链接](/#safe)\n\n![远程图片](https://example.invalid/b.png)";
+    let wrong_csrf = send(
+        &app,
+        "PATCH",
+        &format!("/tasks/{id}"),
+        Some(ORIGIN),
+        Some(&cookie),
+        Some("wrong"),
+        Some(json!({"expected_version":1, "description":edited})),
+    )
+    .await;
+    assert_eq!(wrong_csrf.status(), StatusCode::FORBIDDEN);
+    let wrong_origin = send(
+        &app,
+        "PATCH",
+        &format!("/tasks/{id}"),
+        Some("https://other.example"),
+        Some(&cookie),
+        Some(&csrf),
+        Some(json!({"expected_version":1, "description":edited})),
+    )
+    .await;
+    assert_eq!(wrong_origin.status(), StatusCode::FORBIDDEN);
+    let saved = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":1, "description":edited}),
+    )
+    .await;
+    assert_eq!(saved.status(), StatusCode::OK);
+    assert_eq!(json_body(saved).await["description"], edited);
+    let stale = write(
+        &app,
+        "PATCH",
+        &format!("/tasks/{id}"),
+        &cookie,
+        &csrf,
+        json!({"expected_version":1, "description":"不能覆盖的新文本"}),
+    )
+    .await;
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
+    let reloaded = send(
+        &app,
+        "GET",
+        &format!("/tasks/{id}"),
+        None,
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(json_body(reloaded).await["description"], edited);
+}
