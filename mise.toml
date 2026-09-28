@@ -2,10 +2,11 @@
 rust = { version = "1.97.1", profile = "minimal", components = ["rustfmt", "clippy"] }
 node = "24.21.0"
 pnpm = "12.3.4"
+restic = "0.19.1"
 
 [tasks.setup]
 description = "安装锁定依赖"
-run = ["mise install --locked rust node pnpm", "bash scripts/verify-toolchain.sh", "pnpm install --frozen-lockfile", "cargo fetch --locked"]
+run = ["mise install --locked rust node pnpm restic", "bash scripts/verify-toolchain.sh", "pnpm install --frozen-lockfile", "cargo fetch --locked"]
 
 [tasks."dev:api"]
 depends = ["db:start"]
@@ -22,15 +23,15 @@ depends = ["dev:api", "dev:admin"]
 [tasks.fmt]
 description = "修复 Rust 与前端格式"
 depends = ["setup"]
-run = ["cargo fmt --all", "pnpm exec prettier --write apps/admin scripts/contract.mjs packages/api-contract/package.json package.json pnpm-workspace.yaml eslint.config.js"]
+run = ["cargo fmt --all", "pnpm exec prettier --write apps/admin scripts/*.mjs packages/api-contract/package.json package.json pnpm-workspace.yaml eslint.config.js"]
 
 [tasks."fmt:check"]
 depends = ["setup"]
-run = ["cargo fmt --all -- --check", "pnpm exec prettier --check apps/admin scripts/contract.mjs packages/api-contract/package.json package.json pnpm-workspace.yaml eslint.config.js"]
+run = ["cargo fmt --all -- --check", "pnpm exec prettier --check apps/admin scripts/*.mjs packages/api-contract/package.json package.json pnpm-workspace.yaml eslint.config.js"]
 
 [tasks.lint]
 depends = ["setup"]
-run = ["cargo clippy --workspace --all-targets --locked -- -D warnings", "pnpm exec eslint apps/admin/src apps/admin/e2e apps/admin/vite.config.ts apps/admin/playwright.config.ts eslint.config.js scripts/contract.mjs --max-warnings 0"]
+run = ["cargo clippy --workspace --all-targets --locked -- -D warnings", "pnpm exec eslint apps/admin/src apps/admin/e2e apps/admin/vite.config.ts apps/admin/playwright.config.ts eslint.config.js scripts/*.mjs --max-warnings 0"]
 
 [tasks."contract:generate"]
 description = "从 Rust DTO 生成 OpenAPI 与 TypeScript 类型"
@@ -52,7 +53,35 @@ depends = ["fmt:check", "lint", "typecheck"]
 
 [tasks.test]
 depends = ["db:start"]
-run = ["bash scripts/db.sh test", "pnpm --filter @mindfolio/admin test", "pnpm --filter @mindfolio/admin exec playwright install --with-deps chromium", "pnpm --filter @mindfolio/admin test:browser"]
+run = ["bash scripts/db.sh test", "node --test scripts/backup.test.mjs", "pnpm --filter @mindfolio/admin test", "pnpm --filter @mindfolio/admin exec playwright install --with-deps chromium", "pnpm --filter @mindfolio/admin test:browser"]
+
+[tasks."backup:init"]
+description = "初始化独立的加密备份仓库"
+run = "node scripts/backup.mjs init"
+
+[tasks."backup:run"]
+description = "创建并读回校验数据库恢复点"
+run = "node scripts/backup.mjs run"
+
+[tasks."backup:state"]
+description = "保存 Portainer 与 Caddy 入口状态"
+run = "node scripts/backup.mjs state"
+
+[tasks."backup:age"]
+description = "检查服务器外数据库恢复点年龄并记录异常"
+run = "node scripts/backup.mjs age"
+
+[tasks."backup:prune"]
+description = "按快照时间清理旧恢复点"
+run = "node scripts/backup.mjs prune"
+
+[tasks."backup:list"]
+description = "列举服务器外有效恢复点"
+run = "node scripts/backup.mjs list"
+
+[tasks."backup:verify"]
+description = "读回并校验指定恢复点；通过参数传入完整快照 ID"
+run = "node scripts/backup.mjs verify"
 
 [tasks."db:start"]
 description = "启动本地 PostgreSQL"

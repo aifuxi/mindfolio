@@ -26,6 +26,18 @@ checksum = "sha256:9560243d4e92780c4466bac2ee6aac4166c8bb601ad3c63f070cdd701b28f
 url = "https://github.com/pnpm/pnpm/releases/download/v12.3.4/pnpm-darwin-arm64.tar.gz"
 provenance = "github-attestations"
 
+[[tools.restic]]
+version = "0.19.1"
+backend = "aqua:restic/restic"
+
+[tools.restic."platforms.linux-x64"]
+checksum = "sha256:f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c"
+url = "https://github.com/restic/restic/releases/download/v0.19.1/restic_0.19.1_linux_amd64.bz2"
+
+[tools.restic."platforms.macos-arm64"]
+checksum = "sha256:7be0a144ccc377880f294204aa271d76e4b79554b42a751151d425ce6ebac143"
+url = "https://github.com/restic/restic/releases/download/v0.19.1/restic_0.19.1_darwin_arm64.bz2"
+
 [[tools.rust]]
 version = "1.97.1"
 backend = "core:rust"

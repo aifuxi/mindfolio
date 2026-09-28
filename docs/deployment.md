@@ -43,4 +43,4 @@ API、PostgreSQL 没有公网 `ports`，PostgreSQL 只连应用内网，API 只�
 
 SSH 是独立恢复入口。Portainer 域名或 Caddy 不可用时，使用上述 SSH 隧道直连 `127.0.0.1:9443`；面板容器故障时运行 `mise run deploy:portainer:up`。入口故障时先检查 `/srv/mindfolio/edge/caddy/Caddyfile`、AliDNS 权限、DNS TXT 传播、`mindfolio_edge_data` 卷及 `mise run deploy:status`，再用 `mise run deploy:edge:reload` 或 `mise run deploy:edge:up` 恢复。
 
-面板无法操作 Stack 时，在原 `/srv/mindfolio/repo`、原 `production.env` 与原 Caddy 挂载路径下运行 `mise run deploy:network:create`、`mise run deploy:db:up`、`mise run deploy:migrate`、`mise run deploy:app:up`、`mise run deploy:edge:up`。Compose 文件中的 project 名、服务名和卷名保持不变，避免生成空数据库或新的证书状态。恢复面板后核对 Stack 记录与 Docker 现状；不要直接删除卷或重建同名 Stack。Portainer 数据、Caddy `/data` 与 `/config`、PostgreSQL 数据的服务器外备份和实际恢复演练分别在任务 03 与 05 完成。
+面板无法操作 Stack 时，在原 `/srv/mindfolio/repo`、原 `production.env` 与原 Caddy 挂载路径下运行 `mise run deploy:network:create`、`mise run deploy:db:up`、`mise run deploy:migrate`、`mise run deploy:app:up`、`mise run deploy:edge:up`。Compose 文件中的 project 名、服务名和卷名保持不变，避免生成空数据库或新的证书状态。恢复面板后核对 Stack 记录与 Docker 现状；不要直接删除卷或重建同名 Stack。Portainer 数据、Caddy `/data` 与 `/config`、PostgreSQL 数据的服务器外备份步骤见[离站备份与恢复点](./backup.md)，实际恢复演练由任务 05 完成。

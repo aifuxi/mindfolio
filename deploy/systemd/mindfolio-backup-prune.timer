@@ -1,0 +1,10 @@
+[Unit]
+Description=每天清理 Mindfolio 过期恢复点
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+Unit=mindfolio-backup-prune.service
+
+[Install]
+WantedBy=timers.target

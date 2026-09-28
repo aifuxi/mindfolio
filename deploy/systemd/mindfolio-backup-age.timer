@@ -1,0 +1,10 @@
+[Unit]
+Description=每 10 分钟检查 Mindfolio 离站恢复点
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+Unit=mindfolio-backup-age.service
+
+[Install]
+WantedBy=timers.target

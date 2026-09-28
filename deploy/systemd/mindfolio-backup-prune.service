@@ -1,0 +1,12 @@
+[Unit]
+Description=清理 Mindfolio 过期离站恢复点
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/mindfolio/repo
+EnvironmentFile=/srv/mindfolio/config/backup.env
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/root/.local/bin
+ExecStart=/usr/bin/env mise run backup:prune
+UMask=0077

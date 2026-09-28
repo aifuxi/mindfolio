@@ -30,7 +30,7 @@ export default [
       "apps/admin/vite.config.ts",
       "apps/admin/playwright.config.ts",
       "apps/admin/e2e/**/*.ts",
-      "scripts/contract.mjs",
+      "scripts/**/*.mjs",
     ],
     languageOptions: { globals: globals.node },
   },

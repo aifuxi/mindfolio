@@ -1,0 +1,11 @@
+[Unit]
+Description=每 30 分钟创建 Mindfolio 数据库恢复点
+
+[Timer]
+OnCalendar=*-*-* *:00,30:00
+Persistent=true
+AccuracySec=1min
+Unit=mindfolio-backup.service
+
+[Install]
+WantedBy=timers.target

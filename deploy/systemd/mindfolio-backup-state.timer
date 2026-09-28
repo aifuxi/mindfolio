@@ -1,0 +1,10 @@
+[Unit]
+Description=每天保存 Mindfolio 入口状态
+
+[Timer]
+OnCalendar=*-*-* 03:17:00
+Persistent=true
+Unit=mindfolio-backup-state.service
+
+[Install]
+WantedBy=timers.target

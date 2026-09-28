@@ -1,0 +1,12 @@
+[Unit]
+Description=检查 Mindfolio 离站恢复点年龄
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/mindfolio/repo
+EnvironmentFile=/srv/mindfolio/config/backup.env
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/root/.local/bin
+ExecStart=/usr/bin/env mise run backup:age
+UMask=0077

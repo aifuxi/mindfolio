@@ -1,0 +1,15 @@
+[Unit]
+Description=Mindfolio PostgreSQL 离站备份
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/mindfolio/repo
+EnvironmentFile=/srv/mindfolio/config/backup.env
+Environment=BACKUP_TMP_DIR=/run/mindfolio-backup
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/root/.local/bin
+RuntimeDirectory=mindfolio-backup
+RuntimeDirectoryMode=0700
+ExecStart=/usr/bin/env mise run backup:run
+UMask=0077
