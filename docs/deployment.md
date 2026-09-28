@@ -1,6 +1,6 @@
 # 第一阶段部署与恢复入口
 
-本手册对应任务 02 的配置交付。目标服务器发布与真实证书签发在任务 04 验证；服务器外备份在任务 03 建立。在完成备份与目标验收前，不把此配置视为已上线。
+本手册对应任务 02 的配置交付和任务 04 的实际部署。目标服务器使用 Debian 12，真实证书、应用健康及离站备份已在目标机验证；隔离恢复演练仍由任务 05 完成。
 
 ## 固定布局与版本
 
@@ -16,19 +16,19 @@
 
 ## 阿里云 DNS challenge
 
-`deploy/edge.Caddyfile` 使用 `acme_dns alidns`。实际域名必须由阿里云云解析 DNS 托管权威解析，并为 `admin` 子域配置指向服务器的 A/AAAA 记录。为 Caddy 建立单独的 RAM 身份和 AccessKey，仅授予该域名完成 DNS 记录操作所需的 `DescribeDomains`、`DescribeDomainRecords`、`AddDomainRecord`、`UpdateDomainRecord`、`DeleteDomainRecord` 权限；按阿里云可用的资源条件继续缩小范围。密钥写在服务器的 `production.env` 和 Portainer Stack 环境变量中，不写进 Caddyfile、镜像或 Git。持有 Docker socket 管理权限的人能读取容器环境变量，因此只给受信任的管理员访问 Portainer 和服务器。
+`deploy/edge.Caddyfile` 在站点 `tls` 指令中使用 `dns alidns`，并将 DNS TXT 传播等待设为 15 分钟，以容纳解析缓存。实际域名必须由阿里云云解析 DNS 托管权威解析，并为 `admin` 子域配置指向服务器的 A/AAAA 记录。为 Caddy 建立单独的 RAM 身份和 AccessKey，仅授予该域名完成 DNS 记录操作所需的 `DescribeDomains`、`DescribeDomainRecords`、`AddDomainRecord`、`UpdateDomainRecord`、`DeleteDomainRecord` 权限；按阿里云可用的资源条件继续缩小范围。密钥写在服务器的 `production.env` 和 Portainer Stack 环境变量中，不写进 Caddyfile、镜像或 Git。持有 Docker socket 管理权限的人能读取容器环境变量，因此只给受信任的管理员访问 Portainer 和服务器。
 
-DNS challenge 通过 AliDNS API 创建临时 TXT 记录。验证前检查域名权威 NS、RAM 权限、Caddy 容器到阿里云 API 与公共 DNS 的出站连接，以及 443/TCP 的入站连通性；80/TCP 用于 HTTP 到 HTTPS 跳转，443/UDP 用于 HTTP/3。`/data` 保存证书和私钥，`/config` 保存 Caddy 状态，恢复时沿用原卷名并按任务 03 的备份方案恢复。当前本地检查仅证明模块存在、配置可解析，不代表真实签发和续期成功。相关配置依据：[AliDNS 模块](https://github.com/caddy-dns/alidns)、[libdns 权限说明](https://github.com/libdns/alidns)、[Caddy DNS challenge](https://caddyserver.com/docs/caddyfile/options#acme_dns)。
+DNS challenge 通过 AliDNS API 创建临时 TXT 记录。验证前检查域名权威 NS、RAM 权限、Caddy 容器到阿里云 API 与公共 DNS 的出站连接，以及 443/TCP 的入站连通性；80/TCP 用于 HTTP 到 HTTPS 跳转，443/UDP 用于 HTTP/3。`/data` 保存证书和私钥，`/config` 保存 Caddy 状态，恢复时沿用原卷名并按任务 03 的备份方案恢复。目标机已取得正式证书，但续期仍需依靠后续运行时观察。相关配置依据：[AliDNS 模块](https://github.com/caddy-dns/alidns)、[libdns 权限说明](https://github.com/libdns/alidns)、[Caddy DNS challenge](https://caddyserver.com/docs/caddyfile/directives/tls)。
 
 ## 首次准备
 
 1. 在服务器安装 Docker Engine、Compose 插件及固定版本的 mise；检出仓库到 `/srv/mindfolio/repo`，执行 `mise trust`。确认服务器是 `linux/amd64`，且 80/443 未被其他服务占用。
 2. 创建 `/srv/mindfolio/config` 和 `/srv/mindfolio/edge/caddy`，将 `deploy/production.env.example` 复制为 `production.env` 并设置 `0600`，将 `deploy/edge.Caddyfile` 复制为 `/srv/mindfolio/edge/caddy/Caddyfile`。填入真实管理子域、精确的 `AUTH_ORIGIN=https://管理子域`、AliDNS RAM 凭据、随机数据库密码及三个已发布的镜像 digest。`DATABASE_URL` 中的密码需要 URL 编码，且与 `POSTGRES_PASSWORD` 相同。不要用样例值启动生产环境。
 3. 用 `mise run deploy:check` 检查配置，再运行 `mise run deploy:network:create` 创建外部网络。保留 `production.env` 的服务器外安全副本；后续备份任务会覆盖入口状态及 Portainer 状态。
-4. `mise run deploy:portainer:up` 启动面板。通过 `ssh -N -L 9443:127.0.0.1:9443 用户@服务器` 建立隧道，再访问 `https://localhost:9443` 完成首次初始化。面板证书初始为自签名。
+4. `mise run deploy:portainer:up` 启动面板。在本机通过 `ssh -N -L 19443:127.0.0.1:9443 用户@服务器` 建立隧道，再访问本机的 `https://127.0.0.1:19443` 完成首次初始化；这里的 `127.0.0.1:19443` 经 SSH 转发到服务器的 `127.0.0.1:9443`，无须对公网开放 9443 或 19443。面板证书初始为自签名。若首次页面要求 setup token，在服务器受保护的终端运行 `mise exec -- docker compose -f deploy/compose.portainer.yaml logs --tail 100 portainer`，读取容器日志中的 token 并直接输入面板；不要将 token 写入文档或聊天。初始化窗口过期时重启 Portainer，再从新日志中读取 token。
 5. 在 Portainer 创建应用 Stack。首次 API 启动会自动执行版本化迁移；确认 API 与 PostgreSQL 健康后，运行 `mise run deploy:migrate` 再次核对独立迁移入口。使用 `ADMIN_USERNAME=实际用户名 mise run deploy:admin:init` 在交互终端输入两次密码；密码不通过参数或环境文件传递。再创建入口 Stack，运行 `mise run deploy:status`，并从浏览器验证 `https://管理子域/` 和 `https://管理子域/api/health/ready`。
 
-Portainer 中分别建立名为 `mindfolio-app`、`mindfolio-edge` 的 Stack。选择 Git Repository，仓库为 `https://github.com/aifuxi/mindfolio.git`，Compose 路径分别为 `deploy/compose.app.yaml`、`deploy/compose.edge.yaml`，关闭自动 GitOps 更新。将受保护的 `production.env` 中对应变量导入 Stack 环境变量，保持与服务器恢复文件一致。入口 Caddyfile 是宿主机绝对路径挂载；Portainer CE 不会仅凭 Git 仓库中的相对文件自动把它放到宿主机。首次发布直接由 Portainer 创建 Stack；`deploy:db:up`、`deploy:app:up`、`deploy:edge:up` 留作面板外恢复，不能先从 CLI 启动再重复创建 Stack。Portainer 的 Git Stack 与环境变量用法见[官方文档](https://docs.portainer.io/user/docker/stacks/add)。
+Portainer 中先建立仅管理员可管理的公开 Git Source，仓库为 `https://github.com/aifuxi/mindfolio.git`，关闭 Source 自动轮询。再分别建立名为 `mindfolio-app`、`mindfolio-edge` 的 Stack，选择 Repository 和该 Source，引用 `refs/heads/master`，Compose 路径分别为 `deploy/compose.app.yaml`、`deploy/compose.edge.yaml`，关闭自动 GitOps 更新。将受保护的 `production.env` 中对应变量导入 Stack 环境变量，保持与服务器恢复文件一致。入口 Caddyfile 是宿主机绝对路径挂载；Portainer CE 不会仅凭 Git 仓库中的相对文件自动把它放到宿主机。首次发布直接由 Portainer 创建 Stack；`deploy:db:up`、`deploy:app:up`、`deploy:edge:up` 留作面板外恢复，不能先从 CLI 启动再重复创建 Stack。Portainer 的 Git Stack 与环境变量用法见[官方文档](https://docs.portainer.io/user/docker/stacks/add)。
 
 ## 发布与迁移
 
