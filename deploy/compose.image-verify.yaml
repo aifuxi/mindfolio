@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:17.7-alpine@sha256:bb377b7239d2774ac8cc76f481596ce96c5a6b5e9d141f6d0a0ee371a6e7c0f2
+    environment:
+      POSTGRES_USER: mindfolio
+      POSTGRES_PASSWORD: ${IMAGE_TEST_DB_PASSWORD:?缺少测试数据库密码}
+      POSTGRES_DB: mindfolio_image_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mindfolio -d mindfolio_image_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  api:
+    image: ${IMAGE_API_TAG:-mindfolio-api:local}
+    platform: linux/amd64
+    environment:
+      DATABASE_URL: postgres://mindfolio:${IMAGE_TEST_DB_PASSWORD}@postgres:5432/mindfolio_image_test
+      AUTH_ORIGIN: http://127.0.0.1:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  admin:
+    image: ${IMAGE_ADMIN_TAG:-mindfolio-admin:local}
+    platform: linux/amd64
+    depends_on:
+      api:
+        condition: service_healthy

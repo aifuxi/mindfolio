@@ -1,0 +1,17 @@
+:8080 {
+	encode zstd gzip
+
+	handle /__health {
+		respond "ok" 200
+	}
+
+	handle_path /api/* {
+		reverse_proxy api:3001
+	}
+
+	handle {
+		root * /srv/admin
+		try_files {path} /index.html
+		file_server
+	}
+}

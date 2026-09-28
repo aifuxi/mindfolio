@@ -1,6 +1,6 @@
 # 建立生产镜像与 GHCR 发布流水线
 
-Status: ready-for-agent
+Status: in-progress
 
 ## 目标
 
@@ -26,3 +26,9 @@ Status: ready-for-agent
 - 依赖已完成的第一阶段业务与现有 CI。GHCR 可见性和目标 CPU 架构在发布前确认。
 - 向任务 02 交付镜像名称、digest 引用格式、运行配置与迁移命令。
 - 本任务不安装目标服务器，也不执行 Portainer 发布。
+
+## 验收记录
+
+- 2026-09-28：本地 `mise run image:build` 已构建 Linux x64 的 API 与管理端镜像；`mise run image:verify` 使用隔离 PostgreSQL 验证健康检查、静态页面、`/api` 转发和独立迁移程序，结束后清理临时容器与数据卷。
+- `mise run ci`、脚本语法检查与 Git 差异检查通过；两个运行镜像均使用 `10001:10001` 用户，并带有构建提交标识。
+- GHCR 实际发布与 digest 待受控 `master` 流水线验证。
