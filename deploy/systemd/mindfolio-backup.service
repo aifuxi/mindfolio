@@ -9,6 +9,7 @@ WorkingDirectory=/srv/mindfolio/repo
 EnvironmentFile=/srv/mindfolio/config/backup.env
 Environment=BACKUP_TMP_DIR=/run/mindfolio-backup
 Environment=PATH=/usr/local/bin:/usr/bin:/bin:/root/.local/bin
+Environment=HOME=/root
 RuntimeDirectory=mindfolio-backup
 RuntimeDirectoryMode=0700
 ExecStart=/usr/bin/env mise run backup:run

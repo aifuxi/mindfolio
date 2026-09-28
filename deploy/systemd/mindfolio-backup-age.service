@@ -8,5 +8,6 @@ Type=oneshot
 WorkingDirectory=/srv/mindfolio/repo
 EnvironmentFile=/srv/mindfolio/config/backup.env
 Environment=PATH=/usr/local/bin:/usr/bin:/bin:/root/.local/bin
+Environment=HOME=/root
 ExecStart=/usr/bin/env mise run backup:age
 UMask=0077
