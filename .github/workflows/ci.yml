@@ -3,6 +3,9 @@ name: 工程检查
 on:
   push:
     branches: [master]
+    paths-ignore:
+      - "docs/**"
+      - ".scratch/**"
   pull_request:
   workflow_dispatch:
 
