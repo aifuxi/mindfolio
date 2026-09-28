@@ -43,6 +43,8 @@ API、PostgreSQL 没有公网 `ports`，PostgreSQL 只连应用内网，API 只�
 
 每个域名在 `deploy/sites/` 下使用独立 `.caddy` 文件，Caddy 统一处理公开 80/443 和 HTTPS。先配置指向服务器的 DNS 记录，确认目标服务与入口之间有合适的 Docker 网络，再新增站点文件并验证。目标服务端口仅供代理网络访问，不发布到公网；运行 `mise run deploy:edge:config:sync` 同步宿主机文件后，再运行 `mise run deploy:edge:reload`。若要增减入口容器所连网络，还需单独更新 `mindfolio-edge` Stack。Portainer 公网域名由自身账号密码控制，管理者选择不加来源 IP 限制；管理员应维护高强度凭据与 Portainer 安全更新。
 
+不希望把内网上游 IP 写入仓库时，可直接在服务器 `/srv/mindfolio/edge/caddy/sites/` 下创建 `local-*.caddy` 站点文件，再运行 `mise run deploy:edge:reload`。`deploy:edge:config:sync` 会保留这些文件；仓库中的 `deploy/sites/` 不得使用 `local-` 文件名前缀。入口状态备份会保存整个 Caddy 配置目录，恢复时核对这些服务器私有文件。
+
 ## 面板或入口故障
 
 SSH 是独立恢复入口。Portainer 域名或 Caddy 不可用时，使用上述 SSH 隧道直连 `127.0.0.1:9443`；面板容器故障时运行 `mise run deploy:portainer:up`。入口故障时先检查 `/srv/mindfolio/edge/caddy/Caddyfile`、AliDNS 权限、DNS TXT 传播、`mindfolio_edge_data` 卷及 `mise run deploy:status`，再用 `mise run deploy:edge:reload` 或 `mise run deploy:edge:up` 恢复。

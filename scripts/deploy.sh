@@ -56,6 +56,11 @@ case "${1:-}" in
     ;;
   edge:config:sync)
     caddy_dir="${EDGE_CADDY_DIR:-/srv/mindfolio/edge/caddy}"
+    for site in deploy/sites/local-*.caddy; do
+      [[ -e "$site" ]] || continue
+      printf '仓库站点配置不得使用 local- 前缀：%s\n' "$site" >&2
+      exit 1
+    done
     install -d -m 0755 "$caddy_dir/sites"
     install -m 0644 deploy/edge.Caddyfile "$caddy_dir/Caddyfile"
     for site in deploy/sites/*.caddy; do
@@ -63,6 +68,7 @@ case "${1:-}" in
     done
     for site in "$caddy_dir"/sites/*.caddy; do
       [[ -f "$site" ]] || continue
+      [[ "${site##*/}" == local-*.caddy ]] && continue
       [[ -f "deploy/sites/$(basename "$site")" ]] || rm "$site"
     done
     printf '入口站点配置已同步：%s\n' "$caddy_dir"
