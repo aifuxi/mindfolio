@@ -34,8 +34,8 @@ Portainer 中分别建立名为 `mindfolio-app`、`mindfolio-edge` 的 Stack。�
 
 1. 在通过 `mise run ci` 的提交上读取 GitHub Actions `publish` 摘要，记录完整提交号及 API、管理端、入口镜像 digest。镜像 tag 用于追溯，部署变量使用 `name@sha256:...`。先核对数据库备份有效恢复点。
 2. 对照新旧镜像所含迁移脚本评估兼容性。当前最新迁移为 `202609270011_weekly_review.sql`；仅已部署的同一 API 版本及其同一迁移集合经过验证，**未承诺更早镜像可读取迁移后的数据库**。如果新迁移可能破坏旧程序，先安排维护窗口，停止旧 API 与管理端，再迁移；若是经过验证的向后兼容迁移，可保持服务运行。镜像回退不等于数据库回滚，需从备份恢复才能回到旧模式及数据状态。
-3. 在 `production.env` 中把 `API_IMAGE` 改为新 digest，运行 `mise run deploy:migrate`。这会用新镜像中的独立 `migrate` 程序处理现有数据库；失败时停止发布并核对数据库状态。API 启动时也会执行幂等迁移，但这不替代发布前的显式步骤。
-4. 在 Portainer 的 `mindfolio-app` Stack 更新 `API_IMAGE`、`ADMIN_IMAGE` 环境变量为同一提交的 digest，手动重新部署。确认健康状态、登录、Cookie、CSRF 和日志；再把相同值写入服务器 `production.env`。如果入口镜像或 Caddyfile 变化，单独更新 `mindfolio-edge` Stack；Caddyfile 单独变化可同步宿主机文件后用 `mise run deploy:edge:reload` 验证并重载。入口容器重建会造成短暂中断。
+3. 在 `production.env` 中把 `API_IMAGE`、`ADMIN_IMAGE` 改为同一提交的新 digest，运行 `mise run deploy:migrate`。这会用新镜像中的独立 `migrate` 程序处理现有数据库；失败时停止发布并核对数据库状态。API 启动时也会执行幂等迁移，但这不替代发布前的显式步骤。
+4. 在 Portainer 的 `mindfolio-app` Stack 更新 `API_IMAGE`、`ADMIN_IMAGE` 环境变量为 `production.env` 中的 digest，手动重新部署。确认健康状态、登录、Cookie、CSRF 和日志，并核对面板变量与服务器文件一致。如果入口镜像或 Caddyfile 变化，单独更新 `mindfolio-edge` Stack；Caddyfile 单独变化可同步宿主机文件后用 `mise run deploy:edge:reload` 验证并重载。入口容器重建会造成短暂中断。
 
 API、PostgreSQL 没有公网 `ports`，PostgreSQL 只连应用内网，API 只连应用内网；管理端桥接应用内网和入口网络，入口只连外部共享网络。每个服务有 Docker 日志轮转、CPU/内存上限与停止宽限期。2 核 4 GB 的初始限额需要在任务 04 按实际峰值复核，避免数据库或 API 被 OOM 杀死。查看日志可运行 `mise exec -- docker compose --env-file /srv/mindfolio/config/production.env -f deploy/compose.app.yaml logs --tail 100 api`；不要运行会打印秘密的 `docker compose config`，只用 `config --quiet`。
 

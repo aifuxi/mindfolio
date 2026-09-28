@@ -1,6 +1,6 @@
 # 编写 Portainer、Caddy 与应用部署配置
 
-Status: in-progress
+Status: completed
 
 ## 目标
 
@@ -31,4 +31,8 @@ Status: in-progress
 - 2026-09-28：管理者确认实际域名的权威 DNS 由阿里云托管，要求入口 Caddy 镜像支持 DNS challenge。入口镜像固定 Caddy 2.10.2 与 `caddy-dns/alidns` v1.0.29，通过 GHCR 流水线发布；阿里云 RAM 凭据留在部署环境。
 - 已交付 Portainer、入口、应用三个 Compose 配置，Caddyfile、非秘密变量样例、`mise` 运维任务及 `docs/deployment.md`。入口、管理端、API、数据库分别按共享网络和应用内网连接；Portainer 9443 仅绑定回环地址。
 - 本地 `mise run image:build`、`mise run image:verify`、`mise run deploy:verify`、`DEPLOY_ENV_FILE=deploy/production.env.example mise run deploy:check`、`mise run ci` 均通过。隔离验证确认 AliDNS 模块、Caddyfile 语法、入口 `/api` 去前缀代理及网络边界；`mise run ci` 包含 13 个浏览器测试。目标域名实际证书签发、目标服务器架构与资源占用仍属于任务 04。
-- 待 GitHub Actions 发布并取得入口镜像不可变 digest 后完成本任务记录。
+- [GitHub Actions 运行 36366950331](https://github.com/aifuxi/mindfolio/actions/runs/36366950331) 的 `ci`、`publish` 均通过；发布提交为 `ae10b961debdd20bcc2705912516d251c6cdd5cd`。该版本的不可变引用：
+  - `ghcr.io/aifuxi/mindfolio-api@sha256:af20b253781f25cececbe1e220400e5dcbfddc48160d745e7307df2550744947`
+  - `ghcr.io/aifuxi/mindfolio-admin@sha256:0af02667f535de63581e60282053d0cbcca9299e3d17f0c160074c1920734cec`
+  - `ghcr.io/aifuxi/mindfolio-edge@sha256:06140d85dc1935a18b95f02e7b6e999579299e83705b8f57e0a4a7ff355997ff`
+- 使用空 Docker 凭据配置读取入口镜像 manifest 成功。任务 02 的配置与本地验收完成；目标服务器上的实际域名、证书、手动发布与资源实测由任务 04 验证。
