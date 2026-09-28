@@ -1,12 +1,12 @@
-{
-	acme_dns alidns {
-		access_key_id {env.ALIYUN_ACCESS_KEY_ID}
-		access_key_secret {env.ALIYUN_ACCESS_KEY_SECRET}
-	}
-}
-
 {$ADMIN_DOMAIN} {
 	encode zstd gzip
+	tls {
+		dns alidns {
+			access_key_id {env.ALIYUN_ACCESS_KEY_ID}
+			access_key_secret {env.ALIYUN_ACCESS_KEY_SECRET}
+		}
+		propagation_timeout 15m
+	}
 
 	reverse_proxy admin:8080
 }
