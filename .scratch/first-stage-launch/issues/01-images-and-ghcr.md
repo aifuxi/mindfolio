@@ -1,6 +1,6 @@
 # 建立生产镜像与 GHCR 发布流水线
 
-Status: in-progress
+Status: completed
 
 ## 目标
 
@@ -31,4 +31,6 @@ Status: in-progress
 
 - 2026-09-28：本地 `mise run image:build` 已构建 Linux x64 的 API 与管理端镜像；`mise run image:verify` 使用隔离 PostgreSQL 验证健康检查、静态页面、`/api` 转发和独立迁移程序，结束后清理临时容器与数据卷。
 - `mise run ci`、脚本语法检查与 Git 差异检查通过；两个运行镜像均使用 `10001:10001` 用户，并带有构建提交标识。
-- GHCR 实际发布与 digest 待受控 `master` 流水线验证。
+- GitHub Actions [运行 36362046622](https://github.com/aifuxi/mindfolio/actions/runs/36362046622) 的 `ci` 与 `publish` 均通过；`master` 提交 `f0218a139b1e6d69ec9fdba5a127624f67a29a4d` 发布版本标签 `sha-f0218a139b1e6d69ec9fdba5a127624f67a29a4d`。
+- API 不可变引用：`ghcr.io/aifuxi/mindfolio-api@sha256:04cdd0075f23d3dba071b15f5c03c80f8a7e9a74644edf7fcfd86a0517455c74`；管理端不可变引用：`ghcr.io/aifuxi/mindfolio-admin@sha256:8eb703b3e98c352075a8fce80297163a9045deb5e5710c27086508c1d070cff9`。使用空 Docker 凭据配置读取两个远端 manifest 均成功，确认可拉取。
+- 流水线对 PR 仅授予 `contents: read`，发布 job 仅在 `master` 的 push 后运行并单独取得 `packages: write`；未向镜像传入 GHCR 令牌。目标服务器架构尚未确认，当前交付平台为 `linux/amd64`。
