@@ -67,7 +67,7 @@ verify_images() {
 }
 
 publish_images() {
-  local repository revision tag target image name digest summary source
+  local repository revision tag target image name digest summary
   [[ "${GITHUB_EVENT_NAME:-}" == push && "${GITHUB_REF:-}" == refs/heads/master ]] || {
     printf '只允许 master 的 push 流水线发布镜像\n' >&2
     exit 1
@@ -107,25 +107,6 @@ publish_images() {
       exit 1
     }
     printf '| %s | `%s` | `%s@%s` |\n' "$target" "$tag" "$name" "$digest" >> "$summary"
-    printf '%s@%s\n' "$name" "$digest"
-  done
-
-  for target in postgres portainer; do
-    if [[ "$target" == postgres ]]; then
-      source="postgres:17.7-alpine@sha256:bb377b7239d2774ac8cc76f481596ce96c5a6b5e9d141f6d0a0ee371a6e7c0f2"
-    else
-      source="portainer/portainer-ce:2.45.1@sha256:4d616db18cfeb5dd41a69c0958bc825c84483ea9cde1106eb82a5d26f3bd8b0e"
-    fi
-    name="ghcr.io/$repository-$target"
-    docker pull --platform "$image_platform" "$source"
-    docker tag "$source" "$name:$tag"
-    docker push "$name:$tag"
-    digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$name:$tag")"
-    [[ "$digest" == sha256:* ]] || {
-      printf '无法读取 %s 的发布 digest\n' "$name" >&2
-      exit 1
-    }
-    printf '| %s（上游镜像副本） | `%s` | `%s@%s` |\n' "$target" "$tag" "$name" "$digest" >> "$summary"
     printf '%s@%s\n' "$name" "$digest"
   done
 }
