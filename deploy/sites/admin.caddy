@@ -1,0 +1,5 @@
+{$ADMIN_DOMAIN} {
+	encode zstd gzip
+	import alidns_tls
+	reverse_proxy admin:8080
+}

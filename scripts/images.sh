@@ -42,7 +42,9 @@ verify_images() {
   docker run --rm --platform "$image_platform" "$edge_image" caddy list-modules | grep -qx 'dns.providers.alidns'
   docker run --rm --platform "$image_platform" \
     --mount "type=bind,source=$repo_root/deploy/edge.Caddyfile,target=/etc/caddy/Caddyfile,readonly" \
+    --mount "type=bind,source=$repo_root/deploy/sites,target=/etc/caddy/sites,readonly" \
     --env ADMIN_DOMAIN=http://admin.localhost \
+    --env PORTAINER_DOMAIN=http://portainer.localhost \
     --env ALIYUN_ACCESS_KEY_ID=verify-only \
     --env ALIYUN_ACCESS_KEY_SECRET=verify-only \
     "$edge_image" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile

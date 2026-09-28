@@ -120,10 +120,15 @@ test("数据库归档在读回校验后才列为有效恢复点", async (t) => {
 
 test("入口状态归档包含配置、版本与卷内容并可读回校验", async (t) => {
   const { dir, env } = await fixture(t);
-  const caddy = join(dir, "Caddyfile");
-  await writeFile(caddy, "example.invalid { respond ok }");
+  const caddyDir = join(dir, "caddy");
+  await mkdir(join(caddyDir, "sites"), { recursive: true });
+  await writeFile(join(caddyDir, "Caddyfile"), "import sites/*.caddy");
+  await writeFile(
+    join(caddyDir, "sites", "portainer.caddy"),
+    "example.invalid { respond ok }",
+  );
   await writeFile(env.DEPLOY_ENV_FILE, "API_IMAGE=sha256:test");
-  const result = await backup(["state"], { ...env, EDGE_CADDY_FILE: caddy });
+  const result = await backup(["state"], { ...env, EDGE_CADDY_DIR: caddyDir });
   const record = JSON.parse(
     result.stdout.split("\n").find((line) => line.includes("backup_verified")),
   );
@@ -133,6 +138,19 @@ test("入口状态归档包含配置、版本与卷内容并可读回校验", as
     BACKUP_SNAPSHOT_ID: record.id,
   });
   assert.match(verified.stdout, /backup_verify_ok/);
+  const snapshots = JSON.parse(
+    (await exec("restic", ["snapshots", "--json"], { env })).stdout,
+  );
+  const path = snapshots.find((item) => item.id === record.id).paths[0];
+  const archive = join(dir, "state.tar");
+  const dumped = await exec("restic", ["dump", record.id, path], {
+    env,
+    encoding: "buffer",
+  });
+  await writeFile(archive, dumped.stdout);
+  const files = (await exec("tar", ["-tf", archive])).stdout;
+  assert.match(files, /\.\/caddy\/Caddyfile/);
+  assert.match(files, /\.\/caddy\/sites\/portainer\.caddy/);
 });
 
 test("导出、上传和读回失败均重试、明确退出且不标记有效快照", async (t) => {

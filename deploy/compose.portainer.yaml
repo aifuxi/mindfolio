@@ -4,11 +4,18 @@ services:
   portainer:
     image: portainer/portainer-ce:2.45.1@sha256:4d616db18cfeb5dd41a69c0958bc825c84483ea9cde1106eb82a5d26f3bd8b0e
     restart: unless-stopped
+    command:
+      - --http-enabled
+      - --trusted-origins
+      - ${PORTAINER_ORIGIN:-https://portainer.fuxiaochen.com}
     ports:
-      - 127.0.0.1:9443:9443
+      - ${PORTAINER_HTTPS_BIND:-127.0.0.1:9443}:9443
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - portainer_data:/data
+    networks:
+      - default
+      - portainer_proxy
     logging:
       driver: json-file
       options:
@@ -19,4 +26,9 @@ services:
 
 volumes:
   portainer_data:
-    name: mindfolio_portainer_data
+    name: ${PORTAINER_DATA_VOLUME:-mindfolio_portainer_data}
+
+networks:
+  portainer_proxy:
+    external: true
+    name: ${PORTAINER_PROXY_NETWORK:-mindfolio_portainer_proxy}

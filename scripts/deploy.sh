@@ -26,10 +26,18 @@ edge_compose() {
   docker compose --env-file "$env_file" --file "$edge_file" "$@"
 }
 
+portainer_compose() {
+  if [[ -f "$env_file" ]]; then
+    docker compose --env-file "$env_file" --file "$portainer_file" "$@"
+  else
+    docker compose --file "$portainer_file" "$@"
+  fi
+}
+
 case "${1:-}" in
   check)
     require_env_file
-    docker compose --file "$portainer_file" config --quiet
+    portainer_compose config --quiet
     app_compose config --quiet
     edge_compose config --quiet
     printf '三个 Compose 配置检查通过\n'
@@ -40,9 +48,27 @@ case "${1:-}" in
       docker network create "$network" >/dev/null
     fi
     printf '共享网络已就绪：%s\n' "$network"
+    network="${PORTAINER_PROXY_NETWORK:-mindfolio_portainer_proxy}"
+    if ! docker network inspect "$network" >/dev/null 2>&1; then
+      docker network create --internal "$network" >/dev/null
+    fi
+    printf '面板代理网络已就绪：%s\n' "$network"
+    ;;
+  edge:config:sync)
+    caddy_dir="${EDGE_CADDY_DIR:-/srv/mindfolio/edge/caddy}"
+    install -d -m 0755 "$caddy_dir/sites"
+    install -m 0644 deploy/edge.Caddyfile "$caddy_dir/Caddyfile"
+    for site in deploy/sites/*.caddy; do
+      install -m 0644 "$site" "$caddy_dir/sites/$(basename "$site")"
+    done
+    for site in "$caddy_dir"/sites/*.caddy; do
+      [[ -f "$site" ]] || continue
+      [[ -f "deploy/sites/$(basename "$site")" ]] || rm "$site"
+    done
+    printf '入口站点配置已同步：%s\n' "$caddy_dir"
     ;;
   portainer:up)
-    docker compose --file "$portainer_file" up --detach --wait
+    portainer_compose up --detach --wait
     ;;
   db:up)
     app_compose up --detach --wait postgres
@@ -74,12 +100,12 @@ case "${1:-}" in
     edge_compose exec -T edge caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
     ;;
   status)
-    docker compose --file "$portainer_file" ps
+    portainer_compose ps
     app_compose ps
     edge_compose ps
     ;;
   *)
-    printf '用法：%s {check|network:create|portainer:up|db:up|migrate|admin:init|admin:reset|app:up|edge:up|edge:reload|status}\n' "$0" >&2
+    printf '用法：%s {check|network:create|edge:config:sync|portainer:up|db:up|migrate|admin:init|admin:reset|app:up|edge:up|edge:reload|status}\n' "$0" >&2
     exit 2
     ;;
 esac

@@ -153,6 +153,9 @@ run = "bash scripts/deployment-verify.sh"
 [tasks."deploy:network:create"]
 run = "bash scripts/deploy.sh network:create"
 
+[tasks."deploy:edge:config:sync"]
+run = "bash scripts/deploy.sh edge:config:sync"
+
 [tasks."deploy:portainer:up"]
 run = "bash scripts/deploy.sh portainer:up"
 

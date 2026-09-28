@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import {
+  cp,
   copyFile,
   mkdtemp,
   mkdir,
@@ -9,7 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
@@ -243,6 +244,7 @@ async function stateBackup() {
       "deploy/compose.portainer.yaml",
       "portainer",
       join(stage, "portainer"),
+      true,
     );
     await copyStopped(
       "deploy/compose.edge.yaml",
@@ -251,10 +253,12 @@ async function stateBackup() {
       true,
     );
     await copyFile(deployEnv, join(stage, "production.env"));
-    await copyFile(
-      process.env.EDGE_CADDY_FILE || "/srv/mindfolio/edge/caddy/Caddyfile",
-      join(stage, "Caddyfile"),
-    );
+    const caddyDir =
+      process.env.EDGE_CADDY_DIR ||
+      dirname(
+        process.env.EDGE_CADDY_FILE || "/srv/mindfolio/edge/caddy/Caddyfile",
+      );
+    await cp(caddyDir, join(stage, "caddy"), { recursive: true });
     const revision = (await run("git", ["rev-parse", "HEAD"])).trim();
     await writeFile(
       join(stage, "manifest.json"),

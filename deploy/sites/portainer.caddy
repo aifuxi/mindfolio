@@ -1,0 +1,5 @@
+{$PORTAINER_DOMAIN} {
+	encode zstd gzip
+	import alidns_tls
+	reverse_proxy portainer:9000
+}

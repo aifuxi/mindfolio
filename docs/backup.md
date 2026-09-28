@@ -32,7 +32,7 @@ mise run backup:list
 
 `backup:run` 对导出、上传或读回校验失败最多尝试三次，间隔 1 分钟和 2 分钟。每次备份先执行一致性 `pg_dump -Fc`，restic 加密上传，随后通过 `restic dump` 从服务器外读回全部内容并比对 SHA-256。只有读回成功后才加 `mindfolio-verified` 标签；失败上传或读回失败的快照不进入有效恢复点列表。每 10 分钟的 `backup:age` 以最新有效数据库快照时间计算年龄：50 分钟记录 `warning`，60 分钟及以上记录 `critical`；两种情况均以非零状态退出。备份作业三次失败后也以非零状态退出。值班人员需定期查看 `systemctl --failed 'mindfolio-backup*'` 和 `journalctl -u mindfolio-backup.service -u mindfolio-backup-age.service -u mindfolio-backup-state.service -u mindfolio-backup-prune.service`；系统不会主动推送通知。
 
-`backup:state` 每天执行一次。它分别短暂停止 Portainer 和入口 Caddy 容器，复制 Portainer `/data`、Caddy `/data` 和 `/config`，然后启动服务；再将 `production.env`、宿主机 Caddyfile、仓库提交号与快照时间打入 tar 归档。该任务会造成短暂的面板与 HTTPS 入口中断，应在目标环境观察耗时并选择适合的时段。恢复点同样经加密上传、完整读回和 SHA-256 校验。若容器不存在或复制失败，任务失败且不会产生有效入口恢复点。
+`backup:state` 每天执行一次。它分别短暂停止 Portainer 和入口 Caddy 容器，复制 Portainer `/data`、Caddy `/data` 和 `/config`，然后启动服务；再将 `production.env`、宿主机 Caddy 配置目录（`Caddyfile` 与 `sites/*.caddy`）、仓库提交号与快照时间打入 tar 归档。该任务会造成短暂的面板与 HTTPS 入口中断，应在目标环境观察耗时并选择适合的时段。恢复点同样经加密上传、完整读回和 SHA-256 校验。若容器不存在或复制失败，任务失败且不会产生有效入口恢复点。
 
 ## 列举、下载与校验
 
@@ -48,7 +48,7 @@ sha256sum /受保护的临时目录/mindfolio.dump
 
 入口状态的文件名为 `mindfolio-state.tar`。下载后与 `backup:list` 所列 SHA-256 比对，再用 `tar -tf` 检查内容，确认 `manifest.json` 的提交号和快照时间；解包到受保护的临时目录。数据库归档用 `pg_restore --list` 检查自定义格式，隔离环境还原由任务 05 完成。临时目录位于加密磁盘或 tmpfs，权限为 `0700`，用完清理。`restic dump` 同时解密并校验仓库数据，外层 SHA-256 证明读回字节与写入时一致。手动 JSON 导出不能替代数据库归档。
 
-恢复入口时沿用 `docs/deployment.md` 的 project、卷和网络名称。将入口 tar 中的 `Caddyfile`、`edge/data`、`edge/config`、`portainer/data` 恢复到对应宿主路径或原名 Docker 卷，并核对 `manifest.json` 的提交与镜像 digest；再启动 Portainer 和入口。`production.env` 从服务器外密码管理器核对后恢复。凭据若已轮换，使用新凭据并重新检查 DNS challenge 与 HTTPS。入口状态恢复及 PostgreSQL 实际还原必须在任务 05 的隔离环境演练，不能仅凭下载成功认定 RTO 达标。
+恢复入口时沿用 `docs/deployment.md` 的 project、卷和网络名称。将入口 tar 中的 `caddy/`、`edge/data`、`edge/config`、`portainer/data` 恢复到对应宿主路径或原名 Docker 卷，并核对 `manifest.json` 的提交与镜像 digest；再启动 Portainer 和入口。`production.env` 从服务器外密码管理器核对后恢复。凭据若已轮换，使用新凭据并重新检查 DNS challenge 与 HTTPS。入口状态恢复及 PostgreSQL 实际还原必须在任务 05 的隔离环境演练，不能仅凭下载成功认定 RTO 达标。
 
 ## 保留和故障处理
 

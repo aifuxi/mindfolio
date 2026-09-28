@@ -10,6 +10,7 @@ services:
       - ${EDGE_HTTPS_UDP_PORT:-443}:443/udp
     environment:
       ADMIN_DOMAIN: ${ADMIN_DOMAIN:?缺少管理域名}
+      PORTAINER_DOMAIN: ${PORTAINER_DOMAIN:-portainer.fuxiaochen.com}
       ALIYUN_ACCESS_KEY_ID: ${ALIYUN_ACCESS_KEY_ID:?缺少阿里云 AccessKey ID}
       ALIYUN_ACCESS_KEY_SECRET: ${ALIYUN_ACCESS_KEY_SECRET:?缺少阿里云 AccessKey Secret}
     volumes:
@@ -18,6 +19,7 @@ services:
       - edge_config:/config
     networks:
       - edge
+      - portainer_proxy
     logging:
       driver: json-file
       options:
@@ -37,3 +39,6 @@ networks:
   edge:
     external: true
     name: ${EDGE_NETWORK:-mindfolio_edge}
+  portainer_proxy:
+    external: true
+    name: ${PORTAINER_PROXY_NETWORK:-mindfolio_portainer_proxy}
