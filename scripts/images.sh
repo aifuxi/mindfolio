@@ -7,6 +7,7 @@ cd "$repo_root"
 image_platform="${IMAGE_PLATFORM:-linux/amd64}"
 api_image="${IMAGE_API_TAG:-mindfolio-api:local}"
 admin_image="${IMAGE_ADMIN_TAG:-mindfolio-admin:local}"
+edge_image="${IMAGE_EDGE_TAG:-mindfolio-edge:local}"
 compose_file="deploy/compose.image-verify.yaml"
 
 build_images() {
@@ -14,21 +15,37 @@ build_images() {
   revision="$(git rev-parse HEAD)"
   version="${IMAGE_VERSION:-sha-${revision:0:12}}"
 
-  for target in api admin; do
+  for target in api admin edge; do
     if [[ "$target" == api ]]; then
       image="$api_image"
-    else
+    elif [[ "$target" == admin ]]; then
       image="$admin_image"
+    else
+      image="$edge_image"
     fi
-    docker buildx build --load --platform "$image_platform" \
-      --file deploy/Dockerfile --target "$target" \
-      --build-arg "VCS_REF=$revision" --build-arg "IMAGE_VERSION=$version" \
-      --tag "$image" .
+    if [[ "$target" == edge ]]; then
+      docker buildx build --load --platform "$image_platform" \
+        --file deploy/Dockerfile.edge \
+        --build-arg "VCS_REF=$revision" --build-arg "IMAGE_VERSION=$version" \
+        --tag "$image" .
+    else
+      docker buildx build --load --platform "$image_platform" \
+        --file deploy/Dockerfile --target "$target" \
+        --build-arg "VCS_REF=$revision" --build-arg "IMAGE_VERSION=$version" \
+        --tag "$image" .
+    fi
   done
 }
 
 verify_images() {
-  docker image inspect "$api_image" "$admin_image" >/dev/null
+  docker image inspect "$api_image" "$admin_image" "$edge_image" >/dev/null
+  docker run --rm --platform "$image_platform" "$edge_image" caddy list-modules | grep -qx 'dns.providers.alidns'
+  docker run --rm --platform "$image_platform" \
+    --mount "type=bind,source=$repo_root/deploy/edge.Caddyfile,target=/etc/caddy/Caddyfile,readonly" \
+    --env ADMIN_DOMAIN=http://admin.localhost \
+    --env ALIYUN_ACCESS_KEY_ID=verify-only \
+    --env ALIYUN_ACCESS_KEY_SECRET=verify-only \
+    "$edge_image" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
   project_id="mindfolio-image-verify-$$"
   export IMAGE_API_TAG="$api_image"
   export IMAGE_ADMIN_TAG="$admin_image"
@@ -73,11 +90,13 @@ publish_images() {
     printf '| 服务 | 版本 | 不可变引用 |\n| --- | --- | --- |\n'
   } >> "$summary"
 
-  for target in api admin; do
+  for target in api admin edge; do
     if [[ "$target" == api ]]; then
       image="$api_image"
-    else
+    elif [[ "$target" == admin ]]; then
       image="$admin_image"
+    else
+      image="$edge_image"
     fi
     name="ghcr.io/$repository-$target"
     docker tag "$image" "$name:$tag"

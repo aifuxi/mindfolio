@@ -1,0 +1,76 @@
+name: mindfolio-app
+
+services:
+  postgres:
+    image: postgres:17.7-alpine@sha256:bb377b7239d2774ac8cc76f481596ce96c5a6b5e9d141f6d0a0ee371a6e7c0f2
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mindfolio
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?缺少数据库密码}
+      POSTGRES_DB: mindfolio
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mindfolio -d mindfolio"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    mem_limit: 768m
+    cpus: 0.75
+    stop_grace_period: 60s
+
+  api:
+    image: ${API_IMAGE:?缺少 API 镜像 digest}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?缺少数据库连接串}
+      AUTH_ORIGIN: ${AUTH_ORIGIN:?缺少管理来源}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    mem_limit: 512m
+    cpus: 0.75
+    stop_grace_period: 30s
+
+  admin:
+    image: ${ADMIN_IMAGE:?缺少管理端镜像 digest}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - app
+      - edge
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    mem_limit: 128m
+    cpus: 0.25
+    stop_grace_period: 30s
+
+volumes:
+  postgres_data:
+    name: ${POSTGRES_DATA_VOLUME:-mindfolio_postgres_data}
+
+networks:
+  app:
+    internal: true
+  edge:
+    external: true
+    name: ${EDGE_NETWORK:-mindfolio_edge}

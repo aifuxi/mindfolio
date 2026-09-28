@@ -36,8 +36,10 @@ mise run setup
 | `mise run test` | Rust 与前端测试 |
 | `mise run build` | 构建两个应用 |
 | `mise run ci` | 执行全部检查、测试与构建 |
-| `mise run image:build` | 构建 Linux x64 的 API 与管理端生产镜像 |
-| `mise run image:verify` | 在隔离容器中验证镜像、健康检查与同源代理 |
+| `mise run image:build` | 构建 Linux x64 的 API、管理端与 AliDNS 入口镜像 |
+| `mise run image:verify` | 在隔离容器中验证镜像、AliDNS 模块、健康检查与同源代理 |
+| `mise run deploy:check` | 检查生产 Compose 配置；需设置 `DEPLOY_ENV_FILE` |
+| `mise run deploy:verify` | 隔离验证入口代理与服务网络边界 |
 
 未封装的临时命令使用 `mise exec -- <命令>`。开发服务按 `Ctrl+C` 停止。管理端通过 Vite 将 `/api` 代理到本地 API。API 启动时连接数据库并执行迁移；连接或迁移失败会使启动失败。运行中数据库不可用时，`/health/ready` 返回 503，而 `/health/live` 仍表示进程存活。
 
@@ -75,12 +77,12 @@ OpenAPI 的 `servers` 为同源 `/api`，文档 `paths` 为后端路由；管理
 | `AUTH_LOGIN_MAX_ATTEMPTS` | `5` | 单进程、全局时间窗内的登录次数上限 |
 | `AUTH_LOGIN_WINDOW_SECONDS` | `60` | 登录限流时间窗 |
 
-生产入口可参考 [管理端 Caddy 配置](deploy/admin.Caddyfile.example)：管理子域使用 HTTPS，静态资源和 `/api` 保持同源，代理去掉 `/api` 前缀后转发到内部 API。API 容器与入口代理应只通过受控内部网络通信，数据库不对公网开放。目标 VPS 的 CPU、内存、代理和 Cookie 实测需在部署前完成；本地与 CI 的安全属性检查不能代替目标环境验收。
+生产部署参见 [部署与恢复入口](docs/deployment.md)：入口 Caddy 使用 AliDNS DNS challenge，为管理子域提供 HTTPS；管理端镜像处理静态文件和 `/api` 去前缀代理。目标 VPS 的 CPU、内存、代理和 Cookie 实测需在部署前完成；本地与 CI 的安全属性检查不能代替目标环境验收。
 
 ## 生产镜像
 
-`mise run image:build` 用锁定的 `mise`、Rust、Node.js、pnpm、Cargo 与 pnpm 依赖构建 `mindfolio-api:local` 和 `mindfolio-admin:local`。当前镜像只支持 `linux/amd64`；在 macOS arm64 上构建与验证会使用容器模拟执行。构建环境使用 Debian 13，API 运行镜像只保留 API、`migrate`、`admin` 程序及健康检查需要的系统依赖；管理端运行镜像只包含 Caddy 与静态产物。两个服务均以非 root 用户运行，镜像中不设置管理员密码。
+`mise run image:build` 用锁定的 `mise`、Rust、Node.js、pnpm、Cargo 与 pnpm 依赖构建 `mindfolio-api:local` 和 `mindfolio-admin:local`，并构建带 AliDNS 模块的 `mindfolio-edge:local`。当前镜像只支持 `linux/amd64`；在 macOS arm64 上构建与验证会使用容器模拟执行。构建环境使用 Debian 13，API 运行镜像只保留 API、`migrate`、`admin` 程序及健康检查需要的系统依赖；管理端运行镜像只包含 Caddy 与静态产物。API 和管理端均以非 root 用户运行，镜像中不设置管理员密码。
 
-`mise run image:verify` 创建临时 PostgreSQL、API 和管理端容器，检查数据库就绪、静态页面、同源 `/api` 转发与独立 `migrate` 程序，结束后删除临时容器和数据卷。该任务需要 Docker、Buildx、Compose 和 `openssl` 命令。CI 在 `mise run ci` 通过后执行镜像构建与验证；只有 `master` 的 push 才进入具有 `packages: write` 权限的 GHCR 发布任务，PR 不发布。
+`mise run image:verify` 创建临时 PostgreSQL、API 和管理端容器，检查数据库就绪、静态页面、同源 `/api` 转发、独立 `migrate` 程序，以及入口镜像的 AliDNS 模块与 Caddyfile 语法。`mise run deploy:verify` 再用生产 Stack 配置隔离检查入口路由与网络边界。两项任务结束后删除临时容器和数据卷。CI 在 `mise run ci` 通过后执行镜像构建与验证；只有 `master` 的 push 才进入具有 `packages: write` 权限的 GHCR 发布任务，PR 不发布。
 
-GHCR 镜像分别为 `ghcr.io/aifuxi/mindfolio-api` 与 `ghcr.io/aifuxi/mindfolio-admin`，版本标签使用完整提交号 `sha-<Git SHA>`。流水线摘要记录提交、版本标签和两个 `name@sha256:<digest>` 引用；部署时使用 digest 固定镜像。API 镜像内的 `/usr/local/bin/migrate` 和 `/usr/local/bin/admin` 与服务程序来自同一构建版本。实际 Stack 配置、迁移顺序和手动发布步骤由第一阶段上线任务 02 交付。
+GHCR 镜像分别为 `ghcr.io/aifuxi/mindfolio-api`、`ghcr.io/aifuxi/mindfolio-admin` 与 `ghcr.io/aifuxi/mindfolio-edge`，版本标签使用完整提交号 `sha-<Git SHA>`。流水线摘要记录提交、版本标签和三个 `name@sha256:<digest>` 引用；部署时使用 digest 固定镜像。API 镜像内的 `/usr/local/bin/migrate` 和 `/usr/local/bin/admin` 与服务程序来自同一构建版本。Stack 配置、迁移顺序和手动发布步骤见[部署与恢复入口](docs/deployment.md)。

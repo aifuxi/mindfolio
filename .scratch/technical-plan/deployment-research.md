@@ -49,12 +49,12 @@ Caddy 与需要被代理的服务加入共享 external network，以服务名访
 
 ## Caddy 配置与状态
 
-- 使用官方镜像，实施时固定经过验证的版本。
+- 以固定版本的官方 Caddy builder 与运行镜像构建入口镜像，加入阿里云 DNS provider；实际模块与镜像 digest 在发布时验证。
 - `/data` 必须持久化并备份，其中包含证书、私钥等状态；同时持久化 `/config`。
 - 服务器固定目录保存 Caddyfile，将整个目录挂载到 `/etc/caddy`，避免单文件挂载在编辑器替换文件后仍指向旧文件。
 - 仅修改 Caddyfile 时，验证后执行 `caddy reload`；镜像、挂载或端口等容器配置变化时需要重建容器，单实例重建应预期有短暂中断。
 
-这些目录和重载方式来自 [Caddy 官方镜像说明](https://hub.docker.com/_/caddy)。证书申请与续期由 Caddy 自动完成，常规公网域名需要正确的 DNS 和挑战端口访问条件；与 Portainer 是否在线无关。[Caddy 自动 HTTPS](https://caddyserver.com/docs/automatic-https)
+这些目录和重载方式来自 [Caddy 官方镜像说明](https://hub.docker.com/_/caddy)。证书申请与续期由 Caddy 自动完成；本项目确认域名权威 DNS 托管在阿里云，入口改用 AliDNS DNS challenge，需阿里云 API 凭据与 DNS TXT 传播正常；与 Portainer 是否在线无关。[Caddy 自动 HTTPS](https://caddyserver.com/docs/automatic-https)
 
 ## 配置来源与面板外恢复
 

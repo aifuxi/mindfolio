@@ -102,16 +102,54 @@ depends = ["setup"]
 run = ["cargo build --release --locked --bin mindfolio-api --bin migrate --bin admin", "pnpm --filter @mindfolio/admin build"]
 
 [tasks."image:build"]
-description = "构建 Linux x64 生产镜像"
+description = "构建 Linux x64 API、管理端与 AliDNS 入口镜像"
 run = "bash scripts/images.sh build"
 
 [tasks."image:verify"]
-description = "验证生产镜像、健康检查与管理端代理"
+description = "验证生产镜像、AliDNS 模块、健康检查与管理端代理"
 run = "bash scripts/images.sh verify"
 
 [tasks."image:publish"]
 description = "仅在受控流水线发布 GHCR 镜像"
 run = "bash scripts/images.sh publish"
+
+[tasks."deploy:check"]
+description = "检查服务器部署 Compose 配置"
+run = "bash scripts/deploy.sh check"
+
+[tasks."deploy:verify"]
+description = "在隔离容器中验证三个服务网络边界和入口路由"
+run = "bash scripts/deployment-verify.sh"
+
+[tasks."deploy:network:create"]
+run = "bash scripts/deploy.sh network:create"
+
+[tasks."deploy:portainer:up"]
+run = "bash scripts/deploy.sh portainer:up"
+
+[tasks."deploy:db:up"]
+run = "bash scripts/deploy.sh db:up"
+
+[tasks."deploy:migrate"]
+run = "bash scripts/deploy.sh migrate"
+
+[tasks."deploy:admin:init"]
+run = "bash scripts/deploy.sh admin:init"
+
+[tasks."deploy:admin:reset"]
+run = "bash scripts/deploy.sh admin:reset"
+
+[tasks."deploy:app:up"]
+run = "bash scripts/deploy.sh app:up"
+
+[tasks."deploy:edge:up"]
+run = "bash scripts/deploy.sh edge:up"
+
+[tasks."deploy:edge:reload"]
+run = "bash scripts/deploy.sh edge:reload"
+
+[tasks."deploy:status"]
+run = "bash scripts/deploy.sh status"
 
 [tasks.ci]
 description = "执行全部质量检查、测试和构建"

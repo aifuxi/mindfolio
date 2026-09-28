@@ -1,0 +1,22 @@
+name: mindfolio-portainer
+
+services:
+  portainer:
+    image: portainer/portainer-ce:2.45.1@sha256:4d616db18cfeb5dd41a69c0958bc825c84483ea9cde1106eb82a5d26f3bd8b0e
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:9443:9443
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    mem_limit: 512m
+    cpus: 0.5
+
+volumes:
+  portainer_data:
+    name: mindfolio_portainer_data
